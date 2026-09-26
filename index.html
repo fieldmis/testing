@@ -603,7 +603,6 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
   <!-- CAMERA -->
   <div class="screen" id="screen-camera">
     <div id="camWrap">
-      <!-- Camera preview; captureSelfie() prefers native still capture for maximum practical quality. -->
       <video id="camVideo" autoplay playsinline></video>
       <canvas id="camCanvas"></canvas>
       <div class="stampPreview" id="stampPreview">
@@ -998,8 +997,6 @@ async function submitPjpUpdate(){
 }
 
 /* ====================== CAMERA / GEO-STAMP ====================== */
-// High-quality capture: native ImageCapture stills when available, high-res video fallback.
-
 let lastGeo = null;
 let stampMapInstance = null;
 let stampClockTimer = null;
@@ -1043,80 +1040,43 @@ function renderStampMiniMap(lat, lng){
 async function startCameraStream(facingMode){
   const previousStream = mediaStream;
   const previousFacing = currentFacingMode;
-
-  // Release the current camera hardware lock first. Most phones can only
-  // keep one camera stream open at a time.
+  // Release the current camera hardware lock first — most phones can only
+  // keep one camera stream open at a time, so requesting the new stream
+  // before stopping the old one fails on many devices.
   if(previousStream){
     previousStream.getTracks().forEach(t=>t.stop());
     mediaStream = null;
+    // Give the OS a brief moment to fully release the camera before the
+    // next request — switching immediately fails on many phones.
     await new Promise(r=>setTimeout(r, 350));
   }
 
-  // Ask the browser for a genuinely high-resolution camera stream.
-  // The browser/device may choose a lower supported resolution automatically.
-  const highResVideo = {
-    facingMode:{ideal:facingMode},
-    width:{ideal:1920, max:3840},
-    height:{ideal:1080, max:2160},
-    frameRate:{ideal:30, max:30}
-  };
-
   let stream;
   try{
-    stream = await navigator.mediaDevices.getUserMedia({video:highResVideo, audio:false});
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:facingMode}, width:{ideal:1920}, height:{ideal:1080}},
+      audio:false
+    });
   }catch(e1){
-    try{
-      // Compatibility fallback for devices/WebViews that reject the more
-      // demanding resolution constraints.
+    if(previousStream && previousFacing !== facingMode){
+      // Could not get the requested camera — restore whatever was working before
+      // rather than leaving the preview frozen/black.
+      await new Promise(r=>setTimeout(r, 350));
       stream = await navigator.mediaDevices.getUserMedia({
-        video:{facingMode:{ideal:facingMode}},
+        video:{facingMode:{ideal:previousFacing}, width:{ideal:1920}, height:{ideal:1080}},
         audio:false
       });
-    }catch(e2){
-      if(previousStream && previousFacing !== facingMode){
-        await new Promise(r=>setTimeout(r, 350));
-        stream = await navigator.mediaDevices.getUserMedia({
-          video:{
-            facingMode:{ideal:previousFacing},
-            width:{ideal:1920, max:3840},
-            height:{ideal:1080, max:2160}
-          },
-          audio:false
-        });
-        facingMode = previousFacing;
-      }else{
-        throw e1;
-      }
+      facingMode = previousFacing;
+    } else {
+      throw e1;
     }
   }
-
   mediaStream = stream;
   const video = document.getElementById('camVideo');
   video.srcObject = mediaStream;
   video.classList.toggle('mirrored', facingMode === 'user');
   currentFacingMode = facingMode;
-
-  // Prefer continuous autofocus when the device exposes it. This is best-effort
-  // because support varies significantly between browsers and phone cameras.
-  const track = mediaStream.getVideoTracks()[0];
-  try{
-    const caps = track && track.getCapabilities ? track.getCapabilities() : {};
-    if(caps && Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')){
-      await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-    }
-  }catch(e){ /* autofocus hint is optional */ }
-
   try{ await video.play(); }catch(e){ /* autoplay already handles most cases */ }
-
-  // Wait until the browser reports the actual camera dimensions before capture.
-  // This prevents an early tap from producing a small/zero-sized frame.
-  if(!video.videoWidth || !video.videoHeight){
-    await new Promise(resolve=>{
-      const onReady = ()=>{ video.removeEventListener('loadedmetadata', onReady); resolve(); };
-      video.addEventListener('loadedmetadata', onReady, {once:true});
-      setTimeout(()=>{ video.removeEventListener('loadedmetadata', onReady); resolve(); }, 2500);
-    });
-  }
 }
 
 async function flipCamera(){
@@ -1335,146 +1295,41 @@ async function captureSelfie(){
   }
 }
 
-async function getNativeStillBlob(track){
-  // ImageCapture can access the camera's still-photo pipeline on supported
-  // Android browsers/WebViews. This is preferable to extracting a frame from
-  // the video stream because the still image can be substantially larger and
-  // sharper than the preview resolution.
-  if(!track || typeof ImageCapture === 'undefined') return null;
-
-  try{
-    const imageCapture = new ImageCapture(track);
-    let photoSettings = {};
-
-    if(typeof imageCapture.getPhotoCapabilities === 'function'){
-      try{
-        const caps = await imageCapture.getPhotoCapabilities();
-        const maxW = Number(caps && caps.imageWidth && caps.imageWidth.max);
-        const maxH = Number(caps && caps.imageHeight && caps.imageHeight.max);
-
-        if(Number.isFinite(maxW) && Number.isFinite(maxH) && maxW > 0 && maxH > 0){
-          // Keep the native still high-resolution while avoiding huge 30–50 MP
-          // frames that can cause memory pressure inside mobile WebViews.
-          const MAX_STILL_PIXELS = 16000000;
-          const pixels = maxW * maxH;
-          const scale = pixels > MAX_STILL_PIXELS ? Math.sqrt(MAX_STILL_PIXELS / pixels) : 1;
-          photoSettings.imageWidth = Math.max(1, Math.round(maxW * scale));
-          photoSettings.imageHeight = Math.max(1, Math.round(maxH * scale));
-        }
-      }catch(e){ /* default takePhoto() settings are fine */ }
-    }
-
-    return await imageCapture.takePhoto(photoSettings);
-  }catch(e){
-    return null;
-  }
-}
-
-async function decodePhotoBlob(blob){
-  if(!blob) return null;
-
-  if(typeof createImageBitmap === 'function'){
-    try{
-      return await createImageBitmap(blob, {imageOrientation:'from-image'});
-    }catch(e){
-      try{ return await createImageBitmap(blob); }catch(e2){}
-    }
-  }
-
-  return await new Promise((resolve, reject)=>{
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.decoding = 'async';
-    img.onload = ()=>{
-      URL.revokeObjectURL(url);
-      resolve(img);
-    };
-    img.onerror = ()=>{
-      URL.revokeObjectURL(url);
-      reject(new Error('Unable to decode captured image.'));
-    };
-    img.src = url;
-  });
-}
-
-function getDrawableDimensions(source){
-  const sw = Number(source && (source.naturalWidth || source.width));
-  const sh = Number(source && (source.naturalHeight || source.height));
-  if(!Number.isFinite(sw) || !Number.isFinite(sh) || sw <= 0 || sh <= 0){
-    throw new Error('Camera image has no usable dimensions.');
-  }
-
-  // Keep exports high-resolution without creating unnecessarily enormous
-  // canvases on phones that expose 20–50 MP still modes.
-  const MAX_OUTPUT_PIXELS = 16000000;
-  const pixels = sw * sh;
-  const scale = pixels > MAX_OUTPUT_PIXELS ? Math.sqrt(MAX_OUTPUT_PIXELS / pixels) : 1;
-
-  return {
-    width: Math.max(1, Math.round(sw * scale)),
-    height: Math.max(1, Math.round(sh * scale))
-  };
-}
-
 async function doCaptureSelfie(){
   const video = document.getElementById('camVideo');
   const canvas = document.getElementById('camCanvas');
-  const track = mediaStream && mediaStream.getVideoTracks ? mediaStream.getVideoTracks()[0] : null;
-
-  let source = null;
-  let sourceIsBitmap = false;
-
-  try{
-    // First choice: native still photo at the best practical resolution.
-    const nativeBlob = await getNativeStillBlob(track);
-    if(nativeBlob){
-      source = await decodePhotoBlob(nativeBlob);
-      sourceIsBitmap = typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap;
-    }
-  }catch(e){
-    source = null;
-  }
-
-  // Fallback: capture the actual video frame at its native resolution.
-  // We do NOT upscale it 4× anymore; interpolation cannot create real detail.
-  if(!source){
-    if(!video.videoWidth || !video.videoHeight){
-      throw new Error('Camera is not ready yet. Please try again.');
-    }
-    source = video;
-  }
-
-  const dims = getDrawableDimensions(source);
-const w = Math.round(dims.width * 0.4);
-const h = Math.round(dims.height * 0.4);
-
-  canvas.width = w;
-  canvas.height = h;
-
-  const ctx = canvas.getContext('2d', {alpha:false, colorSpace:'srgb'});
-  if(!ctx) throw new Error('Could not create photo canvas.');
+  // +300% resolution (4x each dimension, i.e. 16x total pixels) versus
+  // the native video frame. Everything below still computes layout (mapSize,
+  // text rows, etc.) in the ORIGINAL logical width/height via `w`/`h` —
+  // PHOTO_SCALE only maps those same coordinates onto a bigger physical
+  // canvas via ctx.scale(), so geolocation, map-tile fetching, and every
+  // proportion on the stamp panel are completely unaffected; the photo
+  // just comes out sharper.
+  const PHOTO_SCALE = 2;
+  const logicalW = video.videoWidth || 720;
+  const logicalH = video.videoHeight || 960;
+  canvas.width = logicalW * PHOTO_SCALE;
+  canvas.height = logicalH * PHOTO_SCALE;
+  const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
-  try{ ctx.imageSmoothingQuality = 'high'; }catch(e){}
-
-  // Keep the front-camera selfie appearance mirrored, while preserving the
-  // full native still resolution.
+  ctx.imageSmoothingQuality = 'high';
+  ctx.scale(PHOTO_SCALE, PHOTO_SCALE);
   if(currentFacingMode === 'user'){
     ctx.save();
-    ctx.translate(w, 0);
+    ctx.translate(logicalW, 0);
     ctx.scale(-1, 1);
-    ctx.drawImage(source, 0, 0, w, h);
+    ctx.drawImage(video, 0, 0, logicalW, logicalH);
     ctx.restore();
-  }else{
-    ctx.drawImage(source, 0, 0, w, h);
+  } else {
+    ctx.drawImage(video, 0, 0, logicalW, logicalH);
   }
 
-  // Release decoded ImageBitmap memory as soon as the camera frame is on the canvas.
-  if(sourceIsBitmap && source.close){
-    try{ source.close(); }catch(e){}
-  }
+  const w = logicalW, h = logicalH;
 
-  // Keep the existing geo-stamp layout, but render it directly on the native-
-  // resolution canvas so the map, coordinates and timestamp remain sharp.
+  // Size the stamp panel relative to BOTH dimensions of the photo, not just
+  // width — on frames that come back nearly square (varies by device), a
+  // width-only fraction let the panel balloon to a third of the photo with
+  // the map hugely oversized and the text left small and cramped at the top.
   let mapSize = Math.round(Math.min(w*0.24, h*0.22));
   mapSize = Math.max(90, mapSize);
   const pad = Math.max(10, Math.round(mapSize*0.09));
@@ -1492,14 +1347,23 @@ const h = Math.round(dims.height * 0.4);
       ctx.fillRect(mapX, mapY+mapSize-16, mapSize, 16);
       ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';
       ctx.fillText(mapSource.attribution, mapX+4, mapY+mapSize-5);
-    }else{
+    } else {
       drawPinPlaceholder(ctx, mapX, mapY, mapSize);
     }
   }catch(e){ drawPinPlaceholder(ctx, mapX, mapY, mapSize); }
 
+  // Fill the available height with bigger TEXT rather than bigger gaps
+  // between lines: split the map's height into 4 even rows (heading,
+  // address, coordinates, time) and size each row's font off the row
+  // height itself, so extra vertical space grows the glyphs, not the
+  // whitespace between them. Each row is a single truncated line rather
+  // than wrapped, since a row's height is fixed.
   const textX = mapX + mapSize + pad;
   const textW = w - textX - pad;
   const rowH = mapSize / 4;
+  // Sized up close to the safe ceiling for this row layout: baselines sit
+  // at 0.72*rowH within each row, so ~0.85*rowH is as large as heading
+  // text can go before its ascender would crowd the row above it.
   const APP_FONT = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
   const headingSize = Math.max(26, Math.round(rowH*0.80));
   const bodySize = Math.max(22, Math.round(rowH*0.62));
@@ -1526,11 +1390,10 @@ const h = Math.round(dims.height * 0.4);
   ctx.fillText(fitOneLine(ctx, timeStr, textW), textX, mapY + rowH*3.72);
 
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
-  mediaStream = null;
   stopStampClock();
   if(stampMapInstance){ stampMapInstance.remove(); stampMapInstance = null; }
 
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.96));
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
   if(!blob){ toast('Could not save photo.'); return; }
 
   const point = {
@@ -1817,6 +1680,22 @@ const VisitForm = (function(){
   ];
   const SEGMENTS = ["MCO","CVO","PCO","LCV","AGRI"];
 
+  // Maps a logged-in user's login ID to the Distributor(s) they're tagged
+  // against. This lives in the app (not Apps Script) so it's easy to edit
+  // here directly. A user with exactly one tagged DB gets it auto-filled
+  // and the wizard opens straight on Question 2; a user with more than one
+  // sees just their tagged DBs in the Question 1 dropdown. Any user not
+  // listed here falls back to seeing the full DISTRIBUTORS list, so a
+  // newly added rep never gets stuck before being tagged.
+  const USER_DB_MAP = {
+    "D69884": ["Concept Motorbike Company Pvt Limited"],
+    "D92446": ["Gode Engineering Private Limited"],
+    "D91689": ["JS Diesel Spares"],
+    "D74545": ["MANISHA ENTERPRISES"],
+    "D69561": ["MUKTI TRADERS", "SHREE KRISHNA AGENCIES"],
+    "D73116": ["Rajdeep Automotives", "SRI SAINATH AGENCIES"]
+  };
+
   const Q = {
     1:{ type:"select", label:"DistributorName", required:true, options:DISTRIBUTORS.map(o=>({label:o,value:o})) },
     2:{ type:"radio", label:"Type of Visit", required:true,
@@ -1951,6 +1830,7 @@ const VisitForm = (function(){
   let history = [];
   let answers = {};
   let awaitingCapture = false; // true while the location selfie is being captured mid-submit
+  let autoDB = null; // set in reset() when the logged-in user has exactly one tagged DB
 
   let card, btnBack, btnNext, btnClear, navBar;
 
@@ -2030,7 +1910,17 @@ const VisitForm = (function(){
     let extraIds = [];
     if(page.conditional){ extraIds = page.conditional.extraIds; mainIds = page.ids.filter(id=>!extraIds.includes(id)); }
 
-    mainIds.forEach(qid=>{ html += qblockHtml(qid); });
+    mainIds.forEach(qid=>{
+      const blockHtml = qblockHtml(qid);
+      // Question 1 (DistributorName) is auto-filled and kept in the DOM
+      // (for validation/submission) but visually hidden when the user
+      // has exactly one tagged DB, so the wizard appears to start at Q2.
+      if(pageId === 'p1' && qid === 1 && autoDB){
+        html += `<div style="display:none">${blockHtml}</div>`;
+      } else {
+        html += blockHtml;
+      }
+    });
 
     if(page.conditional){
       const trig = answers[page.conditional.trigger];
@@ -2293,6 +2183,22 @@ const VisitForm = (function(){
     answers = {};
     history = [];
     currentPage = 'p1';
+
+    // ---- DB tagging (Question 1) ----
+    const uid = (session && session.userId) ? String(session.userId).trim() : '';
+    const tagged = USER_DB_MAP[uid];
+    if(tagged && tagged.length === 1){
+      Q[1].options = [{label: tagged[0], value: tagged[0]}];
+      answers[1] = tagged[0];
+      autoDB = tagged[0];
+    } else if(tagged && tagged.length > 1){
+      Q[1].options = tagged.map(o=>({label:o, value:o}));
+      autoDB = null;
+    } else {
+      Q[1].options = DISTRIBUTORS.map(o=>({label:o, value:o}));
+      autoDB = null;
+    }
+
     card = document.getElementById('vfCard');
     btnBack = document.getElementById('vfBtnBack');
     btnNext = document.getElementById('vfBtnNext');
