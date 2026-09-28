@@ -800,9 +800,11 @@ function renderScreen(id, direction){
   if(id==='screen-dashboard' && session) loadDashboardStats();
   if(id==='screen-dashboard') ensureHomeBackGuardEntry();
 }
+let suppressHistoryPush = false; // true only while restoring a page after reload
 function showScreen(id){
   renderScreen(id);
-  history.pushState({screen:id}, '', '#'+id);
+  if(suppressHistoryPush) history.replaceState({screen:id}, '', '#'+id);
+  else history.pushState({screen:id}, '', '#'+id);
 }
 function replaceScreen(id, direction){
   renderScreen(id, direction);
@@ -816,9 +818,14 @@ function isHomeScreenActive(){
   const el = document.getElementById('screen-dashboard');
   return !!(el && el.classList.contains('active'));
 }
+let homeExiting = false;
 function exitAppNow(){
   const AppPlugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App;
-  if(AppPlugin) AppPlugin.exitApp();
+  if(AppPlugin){ AppPlugin.exitApp(); return; }
+  // Browser / installed PWA: walk back out of the app's history entries.
+  homeExiting = true;
+  setTimeout(()=>{ homeExiting = false; }, 1500);
+  history.back();
 }
 function armHomeBackExit(){
   if(homeBackArmed){
@@ -828,25 +835,52 @@ function armHomeBackExit(){
     return;
   }
   homeBackArmed = true;
-  toast('Tap again to exit');
+  toast('Tap Back again to exit');
   homeBackArmTimer = setTimeout(()=>{ homeBackArmed = false; }, 2000);
 }
 
+/* Browsers flag history entries added WITHOUT a user gesture and then skip
+   them on Back (which is what made Back leave the app after a reload, and
+   made the exit warning appear only once). So entries are only pushed while
+   a gesture is active; otherwise the push is deferred to the next tap/key. */
+let historyRepair = null; // 'home' | 'sub' — history fix waiting for a gesture
+function hasUserGesture(){
+  return navigator.userActivation ? navigator.userActivation.isActive : true;
+}
 function ensureHomeBackGuardEntry(){
   // Keeps one extra history entry sitting above the dashboard so a back
-  // press always fires popstate (rather than escaping the page/app),
-  // guaranteeing the exit-guard below always gets a chance to run.
+  // press fires popstate (rather than escaping the page/app).
+  if(suppressHistoryPush || !hasUserGesture()){ historyRepair = 'home'; return; }
+  historyRepair = null;
   history.pushState({screen:'screen-dashboard'}, '', '#screen-dashboard');
 }
+function flushHistoryRepair(){
+  if(!historyRepair || !session) return;
+  const kind = historyRepair;
+  const active = document.querySelector('.screen.active');
+  const id = active ? active.id : '';
+  historyRepair = null;
+  if(kind === 'home' && id === 'screen-dashboard'){
+    history.pushState({screen:'screen-dashboard'}, '', '#screen-dashboard');
+  } else if(kind === 'sub' && id && id !== 'screen-dashboard' && id !== 'screen-login'){
+    // Restored sub-page: make Back from it land on the dashboard.
+    history.replaceState({screen:'screen-dashboard'}, '', '#screen-dashboard');
+    history.pushState({screen:id}, '', '#'+id);
+  }
+}
+['pointerup','click','touchend','keydown'].forEach(t=>document.addEventListener(t, flushHistoryRepair, true));
 
 window.addEventListener('popstate', (e)=>{
   // Beat plan not yet confirmed/updated: stay on the PJP screen.
   if(pjpPending && session && document.getElementById('screen-pjp').classList.contains('active')){
-    history.pushState({screen:'screen-pjp'}, '', '#screen-pjp');
-    toast('Please confirm or update your Beat Plan first.');
+    if(!(e.state && e.state.screen === 'screen-pjp')){
+      toast('Please confirm or update your Beat Plan first.');
+      history.go(1); // undo the back step (no new history entry needed)
+    }
     return;
   }
   if(isHomeScreenActive()){
+    if(homeExiting){ history.back(); return; }
     // On the home screen, back NEVER navigates anywhere — it only ever
     // arms or confirms the "tap again to exit" warning. This check runs
     // first and ignores whatever screen the popped history entry claims,
@@ -889,6 +923,12 @@ history.replaceState({screen:'screen-login'}, '', location.href);
     }
     if(isHomeScreenActive()){
       armHomeBackExit();
+      return;
+    }
+    const childIds = ['screen-docslocker','screen-summary','screen-mastersearch','screen-visitreport'];
+    if(childIds.some(id=>document.getElementById(id).classList.contains('active'))){
+      // Don't depend on WebView history (it can be empty after a reload).
+      replaceScreen('screen-dashboard', 'back');
       return;
     }
     if(canGoBack){
@@ -2595,25 +2635,31 @@ function restoreScreenAfterReload(){
   const saved = localStorage.getItem('sfos_screen');
   pjpPending = localStorage.getItem('sfos_pjp_pending') === '1';
 
-  if(pjpPending){
-    document.getElementById('pjpContent').innerHTML = formatPJP(session.pjp);
-    document.getElementById('pjpUpdateBox').style.display = 'none';
-    document.getElementById('confirmPjpBtn').style.display = 'block';
-    document.getElementById('updatePjpBtn').style.display = 'block';
-    replaceScreen('screen-pjp');
-    return;
+  suppressHistoryPush = true; // no gesture yet after a reload: don't add history entries
+  try{
+    if(pjpPending){
+      document.getElementById('pjpContent').innerHTML = formatPJP(session.pjp);
+      document.getElementById('pjpUpdateBox').style.display = 'none';
+      document.getElementById('confirmPjpBtn').style.display = 'block';
+      document.getElementById('updatePjpBtn').style.display = 'block';
+      replaceScreen('screen-pjp');
+      return;
+    }
+    if(saved === 'screen-dayend' && dayEnded){
+      buildDayEndTimeline(true);
+      return;
+    }
+    replaceScreen('screen-dashboard'); // sets historyRepair = 'home'
+    let sub = true;
+    if(saved === 'screen-docslocker') openDocsLocker();
+    else if(saved === 'screen-summary') openSummary();
+    else if(saved === 'screen-mastersearch') showScreen('screen-mastersearch');
+    else if(saved === 'screen-visitreport' && dayStarted && !dayEnded) showScreen('screen-visitreport');
+    else sub = false; // camera / anything else: stay on the dashboard
+    if(sub) historyRepair = 'sub'; // on first tap: dashboard entry + this page entry
+  } finally {
+    suppressHistoryPush = false;
   }
-  if(saved === 'screen-dayend' && dayEnded){
-    buildDayEndTimeline(true);
-    return;
-  }
-  // Base entry first, so Back from a restored page returns to the dashboard.
-  replaceScreen('screen-dashboard');
-  if(saved === 'screen-docslocker') openDocsLocker();
-  else if(saved === 'screen-summary') openSummary();
-  else if(saved === 'screen-mastersearch') showScreen('screen-mastersearch');
-  else if(saved === 'screen-visitreport' && dayStarted && !dayEnded) showScreen('screen-visitreport');
-  // camera / anything else: stay on the dashboard
 }
 if(session && session.date === todayStr()){
   setGreeting();
