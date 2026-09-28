@@ -752,6 +752,7 @@ let captureInProgress = false;
 let nativeShareCooldown = false;
 let dayStarted = false;
 let dayEnded = false;
+let pjpPending = false; // true from login until the beat plan is confirmed or updated
 
 // Only these capture instances feed KM-travelled tracking (todayLog / logPoint):
 // Start of Day selfie, Visit Report selfies (dashboard button + form-submit selfie), End of Day selfie.
@@ -794,6 +795,7 @@ function renderScreen(id, direction){
   const el = document.getElementById(id);
   if(direction==='back') el.classList.add('dir-back');
   el.classList.add('active');
+  if(session && id!=='screen-login') localStorage.setItem('sfos_screen', id); // for reload restore
   if(id==='screen-visitreport') VisitForm.reset();
   if(id==='screen-dashboard' && session) loadDashboardStats();
   if(id==='screen-dashboard') ensureHomeBackGuardEntry();
@@ -838,6 +840,12 @@ function ensureHomeBackGuardEntry(){
 }
 
 window.addEventListener('popstate', (e)=>{
+  // Beat plan not yet confirmed/updated: stay on the PJP screen.
+  if(pjpPending && session && document.getElementById('screen-pjp').classList.contains('active')){
+    history.pushState({screen:'screen-pjp'}, '', '#screen-pjp');
+    toast('Please confirm or update your Beat Plan first.');
+    return;
+  }
   if(isHomeScreenActive()){
     // On the home screen, back NEVER navigates anywhere — it only ever
     // arms or confirms the "tap again to exit" warning. This check runs
@@ -874,6 +882,10 @@ history.replaceState({screen:'screen-login'}, '', location.href);
     if(document.getElementById('screen-camera').classList.contains('active') && mediaStream){
       mediaStream.getTracks().forEach(t=>t.stop());
       mediaStream = null;
+    }
+    if(pjpPending && session && document.getElementById('screen-pjp').classList.contains('active')){
+      toast('Please confirm or update your Beat Plan first.');
+      return;
     }
     if(isHomeScreenActive()){
       armHomeBackExit();
@@ -947,6 +959,8 @@ async function doLogin(){
     document.getElementById('confirmPjpBtn').style.display = 'block';
     document.getElementById('updatePjpBtn').style.display = 'block';
     msgEl.innerHTML = '';
+    pjpPending = true;
+    localStorage.setItem('sfos_pjp_pending', '1');
     showScreen('screen-pjp');
   }catch(e){ msgEl.textContent = 'Could not reach server. Check API_URL.'; }
   finally{ setBtnLoading(btn, false); }
@@ -956,6 +970,8 @@ async function doLogin(){
 function confirmPjp(){
   const planText = String(session.pjp || '').trim();
   shareTextToWhatsApp(`*Todays Plan*\n\n${planText || 'No beat plan set for today.'}`).catch(()=>{});
+  pjpPending = false;
+  localStorage.removeItem('sfos_pjp_pending');
   replaceScreen('screen-dashboard');
   setGreeting();
   updateDashboardButtons();
@@ -991,6 +1007,8 @@ async function submitPjpUpdate(){
   document.getElementById('updatePjpBtn').style.display = 'block';
   toast('Beat plan updated!');
   shareTextToWhatsApp(`*Updated Plan*\n\n${newPlan}`).catch(()=>{});
+  pjpPending = false;
+  localStorage.removeItem('sfos_pjp_pending');
   replaceScreen('screen-dashboard');
   setGreeting();
   updateDashboardButtons();
@@ -1754,7 +1772,7 @@ const VisitForm = (function(){
            {label:"Issue Resolution", value:"Issue Resolution"},
            {label:"Other", value:"__other__", other:true}
          ]},
-    25:{ type:"textarea", label:"Remarks of the Outcome ( Mentioned Number of Coupons Scanned against Target )", required:true, rx:RX.other, err:"Enter a remark of at least 5 characters." },
+    25:{ type:"textarea", label:"Remarks of the Outcome ( Mentioned Number of Coupons Scanned against Target )", placeholder:"For Inactive to Active & Activate with 5 Coupons, Only mention number of coupons scanned e.g. 4. And for MLP Mention Target=Actual e.g. 5=3", required:true, rx:RX.other, err:"Enter a remark of at least 5 characters." },
 
     26:{ type:"text", label:"Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
     27:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name." },
@@ -1876,7 +1894,7 @@ const VisitForm = (function(){
     }
     else if(q.type === 'textarea'){
       const val = answers[qid] || '';
-      inner = `<textarea id="vfInput_${qid}" data-qid="${qid}" placeholder="Type your answer">${vfEsc(val)}</textarea>`;
+      inner = `<textarea id="vfInput_${qid}" data-qid="${qid}" placeholder="${vfEsc(q.placeholder || 'Type your answer')}">${vfEsc(val)}</textarea>`;
     }
     else {
       const val = answers[qid] || '';
@@ -2488,7 +2506,7 @@ function formatHoursWorked(hours){
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m}m`;
 }
-async function buildDayEndTimeline(){
+async function buildDayEndTimeline(skipSave){
   const sorted = [...todayLog].sort((a,b)=> new Date(a.time)-new Date(b.time));
   document.getElementById('timelineList').innerHTML = sorted.map(p=>`
     <div class="timelineItem">
@@ -2528,6 +2546,7 @@ async function buildDayEndTimeline(){
   kmTotalNote.textContent = usedFallback
     ? 'Road distance via routing (straight-line estimate used for some legs).'
     : 'Road distance between capture points via routing.';
+  if(skipSave) return; // restoring after a reload: summary was already saved
   api('saveDaySummary', {
     userId: session.userId,
     date: todayStr(),
@@ -2546,7 +2565,9 @@ function goToDashboardAfterDayEnd(){
 function finishLogout(){
   localStorage.removeItem('sfos_session');
   localStorage.removeItem('sfos_today_log');
-  session = null; todayLog = []; dayStarted = false; dayEnded = false;
+  localStorage.removeItem('sfos_screen');
+  localStorage.removeItem('sfos_pjp_pending');
+  session = null; todayLog = []; dayStarted = false; dayEnded = false; pjpPending = false;
   document.getElementById('loginPin').value='';
   replaceScreen('screen-login', 'back');
 }
@@ -2569,13 +2590,38 @@ scheduleMidnightLogout();
 function todayStr(){ return new Date().toISOString().slice(0,10); }
 
 /* Resume session */
+function restoreScreenAfterReload(){
+  // Read before any renderScreen() call, since rendering overwrites it.
+  const saved = localStorage.getItem('sfos_screen');
+  pjpPending = localStorage.getItem('sfos_pjp_pending') === '1';
+
+  if(pjpPending){
+    document.getElementById('pjpContent').innerHTML = formatPJP(session.pjp);
+    document.getElementById('pjpUpdateBox').style.display = 'none';
+    document.getElementById('confirmPjpBtn').style.display = 'block';
+    document.getElementById('updatePjpBtn').style.display = 'block';
+    replaceScreen('screen-pjp');
+    return;
+  }
+  if(saved === 'screen-dayend' && dayEnded){
+    buildDayEndTimeline(true);
+    return;
+  }
+  // Base entry first, so Back from a restored page returns to the dashboard.
+  replaceScreen('screen-dashboard');
+  if(saved === 'screen-docslocker') openDocsLocker();
+  else if(saved === 'screen-summary') openSummary();
+  else if(saved === 'screen-mastersearch') showScreen('screen-mastersearch');
+  else if(saved === 'screen-visitreport' && dayStarted && !dayEnded) showScreen('screen-visitreport');
+  // camera / anything else: stay on the dashboard
+}
 if(session && session.date === todayStr()){
   setGreeting();
   const log = JSON.parse(localStorage.getItem('sfos_today_log') || '[]');
   if(log.some(p=>p.type==='start')) dayStarted = true;
   if(log.some(p=>p.type==='end')) dayEnded = true;
   updateDashboardButtons();
-  replaceScreen('screen-dashboard');
+  restoreScreenAfterReload();
 } else if(session && session.date !== todayStr()){
   // Session left over from a previous day (app was closed before the
   // midnight auto-logout could run) — clear it so PIN is required again.
