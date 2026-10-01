@@ -756,7 +756,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 <script>
 /* ====================== CONFIG ====================== */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwxMTIh3HXI9OMwNq3Uz3iWowz2NADGjRTpRx_zyZKJMogt4KFD5C-ZgIpoo4ebHHfT/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbyjIoOr0-s-QL-5tFa65mdNu6L12CHyTDVPV8NwYXMOkoVqGLS81LiL_3burFOHsfO3/exec",
   // Separate Apps Script Web App deployment — the "Daily Visit MIS" handler
   // bound to the "Daily Contribution Report" spreadsheet's "Merged Data" tab.
   // It expects a raw { answers: {...} } body (question-id keys), no "action"
@@ -1036,9 +1036,13 @@ async function pollNotifications(){
   if(!session) return;
   try{
     const r = await api('getNotifications', {userId: session.userId});
-    if(!r || !r.ok || !Array.isArray(r.notifications)) return;
+    if(!r || !r.ok || !Array.isArray(r.notifications)){
+      console.warn('[notif] poll did not return notifications:', r);
+      return;
+    }
+    console.log('[notif] poll ok, ' + r.notifications.length + ' pending for ' + session.userId);
     r.notifications.forEach(handleIncomingNotification);
-  }catch(e){ /* best-effort — just try again on the next poll */ }
+  }catch(e){ console.warn('[notif] poll failed:', e); }
 }
 
 function handleIncomingNotification(n){
