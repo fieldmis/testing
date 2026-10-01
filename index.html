@@ -370,20 +370,6 @@ body{min-height:100dvh;letter-spacing:.01em}
 .loader{width:52px}
 .orbitLoaderBox{height:120px}
 .toast{bottom:22px;padding:14px 18px;min-width:220px;text-align:center;animation:toastPop .35s cubic-bezier(.16,1,.3,1)}
-
-/* Full-screen alert for "Ring" notifications — sits above every screen
-   until the rep taps Mark as Read; deliberately NOT a .screen so the
-   page underneath is left exactly as it was. */
-#ringAlertOverlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;
-  padding:24px;background:rgba(5,8,14,.86);backdrop-filter:blur(6px);animation:ringFadeIn .25s ease-out;}
-@keyframes ringFadeIn{from{opacity:0}to{opacity:1}}
-@keyframes ringPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
-.ringAlertCard{max-width:360px;width:100%;background:linear-gradient(145deg,rgba(24,35,54,.96),rgba(10,16,28,.96));
-  border:1px solid rgba(255,95,109,.35);border-radius:24px;padding:28px 22px;text-align:center;
-  box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 40px rgba(255,95,109,.12);}
-.ringAlertIcon{font-size:3rem;animation:ringPulse 1s ease-in-out infinite;}
-.ringAlertTitle{font-weight:700;font-size:1.1rem;color:#fff;margin-top:6px;}
-.ringAlertMsg{margin-top:14px;color:var(--text,#edf4ff);font-size:.98rem;line-height:1.5;white-space:pre-wrap;}
 @media(max-width:380px){.screen{padding-left:14px;padding-right:14px}.heroName{font-size:1.55rem}.heroTile{min-height:205px}.statGrid{gap:9px}.card{border-radius:20px}}
 @media(min-width:501px){body{display:flex;justify-content:center}#app{width:500px;box-shadow:0 0 80px rgba(0,0,0,.35);border-left:1px solid rgba(121,214,255,.06);border-right:1px solid rgba(121,214,255,.06)}}
 
@@ -744,15 +730,6 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 
 <div class="toast" id="toast"></div>
 
-<div id="ringAlertOverlay" style="display:none">
-  <div class="ringAlertCard">
-    <div class="ringAlertIcon">🔔</div>
-    <div class="ringAlertTitle">Shell FOS Alert</div>
-    <div class="ringAlertMsg" id="ringAlertMsg"></div>
-    <button class="btn primary" style="margin-top:18px" onclick="markRingAsRead()">Mark as Read</button>
-  </div>
-</div>
-
 <script>
 /* ====================== CONFIG ====================== */
 const CONFIG = {
@@ -993,139 +970,6 @@ async function api(action, payload){
   return res.json();
 }
 
-/* ====================== NOTIFICATIONS ======================
- * Triggered manually from the backend Sheet's "Notifications" tab — not
- * sent from inside this app. While logged in, the app polls for rows
- * addressed to this UserID (or "ALL") every NOTIF_POLL_MS, and also right
- * away whenever the app/tab becomes visible again. Only works while this
- * page is open or running in the background — a fully closed/killed app
- * won't receive anything until it's reopened (no push service involved).
- *
- * "message" type: a toast + (if permitted) a normal Android notification,
- * auto-acknowledged as soon as it's shown.
- * "ring" type: a full-screen alert with a looping alarm tone + vibration
- * that only stops when the rep taps Mark as Read; acknowledged at that
- * point. Reliable while the app is in the foreground; if it's backgrounded
- * the sound/vibration may be throttled by Android, but the alert still
- * fires the moment the rep reopens the app, since it stays unread on the
- * sheet until acknowledged. */
-const NOTIF_POLL_MS = 30000;
-let notifPollTimer = null;
-let notifInFlight = new Set(); // rows currently being shown/acked, so a repeat poll doesn't double-trigger them
-let activeRingNotif = null;
-let ringBeepTimer = null;
-let notifAudioCtx = null;
-
-function startNotifPolling(){
-  if(notifPollTimer) return;
-  pollNotifications();
-  notifPollTimer = setInterval(pollNotifications, NOTIF_POLL_MS);
-  if('Notification' in window && Notification.permission === 'default'){
-    Notification.requestPermission().catch(()=>{});
-  }
-}
-function stopNotifPolling(){
-  if(notifPollTimer){ clearInterval(notifPollTimer); notifPollTimer = null; }
-  notifInFlight = new Set();
-}
-document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible' && session) pollNotifications();
-});
-
-async function pollNotifications(){
-  if(!session) return;
-  try{
-    const r = await api('getNotifications', {userId: session.userId});
-    if(!r || !r.ok || !Array.isArray(r.notifications)){
-      console.warn('[notif] poll did not return notifications:', r);
-      return;
-    }
-    console.log('[notif] poll ok, ' + r.notifications.length + ' pending for ' + session.userId);
-    r.notifications.forEach(handleIncomingNotification);
-  }catch(e){ console.warn('[notif] poll failed:', e); }
-}
-
-function handleIncomingNotification(n){
-  if(!n || !n.row || notifInFlight.has(n.row)) return;
-  notifInFlight.add(n.row);
-  if(n.type === 'ring') showRingAlert(n);
-  else showMessageNotification(n);
-}
-
-function ackNotification(row){
-  api('markNotificationRead', {row}).catch(()=>{});
-}
-
-function showMessageNotification(n){
-  toast(n.message);
-  try{
-    if('Notification' in window && Notification.permission === 'granted'){
-      new Notification('Shell FOS', {body: n.message});
-    }
-  }catch(e){}
-  ackNotification(n.row); // just an FYI popup — no action required from the rep
-}
-
-function showRingAlert(n){
-  activeRingNotif = n;
-  document.getElementById('ringAlertMsg').textContent = n.message;
-  document.getElementById('ringAlertOverlay').style.display = 'flex';
-  startRingAlarm();
-  try{
-    if('Notification' in window && Notification.permission === 'granted'){
-      new Notification('Shell FOS — Urgent', {body: n.message, requireInteraction: true});
-    }
-  }catch(e){}
-}
-
-function markRingAsRead(){
-  if(!activeRingNotif) return;
-  const n = activeRingNotif;
-  stopRingAlarm();
-  document.getElementById('ringAlertOverlay').style.display = 'none';
-  activeRingNotif = null;
-  ackNotification(n.row);
-}
-
-// Synthesized two-tone alarm beep via the Web Audio API — no sound file to
-// ship or go missing. unlockNotifAudio() below primes the AudioContext on
-// the very first tap anywhere in the app, since mobile browsers block
-// audio that starts with no prior user gesture in the page.
-function playAlarmBeep(){
-  try{
-    if(!notifAudioCtx) return;
-    if(notifAudioCtx.state === 'suspended') notifAudioCtx.resume();
-    const ctx = notifAudioCtx;
-    const now = ctx.currentTime;
-    [0, 0.32].forEach((offset, idx)=>{
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(idx === 0 ? 880 : 660, now + offset);
-      gain.gain.setValueAtTime(0.0001, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.26);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.3);
-    });
-  }catch(e){}
-}
-function startRingAlarm(){
-  playAlarmBeep();
-  ringBeepTimer = setInterval(playAlarmBeep, 900);
-  if(navigator.vibrate) navigator.vibrate([400,200,400,600]);
-}
-function stopRingAlarm(){
-  if(ringBeepTimer){ clearInterval(ringBeepTimer); ringBeepTimer = null; }
-  if(navigator.vibrate) navigator.vibrate(0);
-}
-function unlockNotifAudio(){
-  if(notifAudioCtx) return;
-  try{ notifAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
-}
-['pointerdown','click','touchend','keydown'].forEach(t=>document.addEventListener(t, unlockNotifAudio, {once:true, passive:true}));
-
 function formatPJP(raw){
   if(!raw) return '<div class="muted">No beat plan set for today.</div>';
   const text = String(raw).trim();
@@ -1150,7 +994,6 @@ async function doLogin(){
     if(!r.ok){ msgEl.textContent = r.message || 'Login failed.'; return; }
     session = {userId, userName:r.userName || userId, pjp:r.pjp || '', date: todayStr()};
     localStorage.setItem('sfos_session', JSON.stringify(session));
-    startNotifPolling();
     document.getElementById('pjpContent').innerHTML = formatPJP(r.pjp);
     document.getElementById('pjpUpdateBox').style.display = 'none';
     document.getElementById('confirmPjpBtn').style.display = 'block';
@@ -1966,8 +1809,6 @@ const VisitForm = (function(){
     24:{ type:"radio", label:"Purpose of the Visit", required:true,
          options:[
            {label:"SHA Campaign", value:"SHA Campaign"},
-           {label:"HX8 MLP", value:"HX8 MLP"},
-           {label:"HX6 Campaign", value:"HX6 Campaign"},
            {label:"Inactive to Active", value:"Inactive to Active"},
            {label:"Activate With 5 Coupons", value:"Activate With 5 Coupons"},
            {label:"Issue Resolution", value:"Issue Resolution"},
@@ -2817,7 +2658,6 @@ function finishLogout(){
   localStorage.removeItem('sfos_screen');
   localStorage.removeItem('sfos_pjp_pending');
   session = null; todayLog = []; dayStarted = false; dayEnded = false; pjpPending = false;
-  stopNotifPolling();
   document.getElementById('loginPin').value='';
   replaceScreen('screen-login', 'back');
 }
@@ -2872,7 +2712,6 @@ function restoreScreenAfterReload(){
   }
 }
 if(session && session.date === todayStr()){
-  startNotifPolling();
   setGreeting();
   const log = JSON.parse(localStorage.getItem('sfos_today_log') || '[]');
   if(log.some(p=>p.type==='start')) dayStarted = true;
