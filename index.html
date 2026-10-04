@@ -1198,8 +1198,8 @@ function loadMasterData(){
 // backend (see handleMasterSearch in code.gs) — kept in sync with those
 // aliases so a column is recognized the same way on both sides.
 const LOOKUP_KEY_ALIASES = {
-  shareCode: ['sharecode','workshopcode'],
-  bizomId:   ['bizomid'],
+  shareCode: ['sharecode','workshopcode','shareid','workshopid'],
+  bizomId:   ['bizomid','bizom','linkedbizom'],
   mobile:    ['mobile','mobilenumber','mobileno','phonenumber','userid']
 };
 function xlEsc(s){
