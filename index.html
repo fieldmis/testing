@@ -1,6 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <!-- Used by the Excel Lookup tool: SheetJS reads/writes the uploaded and
+       downloaded .xlsx files, PapaParse reads masterdata.csv. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#050810">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -371,6 +375,11 @@ body{min-height:100dvh;letter-spacing:.01em}
 .orbitLoaderBox{height:120px}
 .toast{bottom:22px;padding:14px 18px;min-width:220px;text-align:center;animation:toastPop .35s cubic-bezier(.16,1,.3,1)}
 
+.xlColRow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(121,214,255,.08)}
+.xlColRow:last-child{border-bottom:none}
+.xlColRow input{width:18px;height:18px;flex:none}
+.xlColRow label{flex:1;word-break:break-word}
+
 /* Full-screen alert for "Ring" notifications — sits above every screen
    until the rep taps Mark as Read; deliberately NOT a .screen so the
    page underneath is left exactly as it was. */
@@ -672,6 +681,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
     <button class="btn primary" id="startDayBtn" onclick="handleStartDay()">Start the Day</button>
     <button class="btn" id="visitReportBtn" style="display:none;" onclick="showScreen('screen-visitreport')">Submit Visit Report</button>
     <button class="btn" onclick="showScreen('screen-mastersearch')">Master Search</button>
+    <button class="btn" onclick="showScreen('screen-exceltool')">Excel Lookup</button>
     <button class="btn" onclick="openSummary()">Summary</button>
     <button class="btn" onclick="openDocsLocker()">Docs Locker</button>
     <button class="btn danger" id="endDayBtn" onclick="handleEndDay()">End the Day</button>
@@ -706,6 +716,22 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
       <button class="btn primary" style="margin:0" id="searchBtn" onclick="doMasterSearch()">Search</button>
     </div>
     <div id="searchResults"></div>
+  </div>
+
+  <!-- EXCEL LOOKUP -->
+  <div class="screen" id="screen-exceltool">
+    <button class="backBtn" onclick="goBack()">‹ Back</button>
+    <h1>Excel Lookup</h1>
+    <div class="card">
+      <div>Upload an Excel file with a Share Code, Bizom ID, or Mobile Number column. Matching rows get filled in from Master Data — then you download the result.</div>
+      <input type="file" id="xlLookupFile" accept=".xlsx,.xls,.csv" style="margin-top:12px;width:100%" onchange="onExcelLookupFileSelected(event)">
+    </div>
+    <div class="card" id="xlLookupStatus" style="display:none"></div>
+    <div class="card" id="xlLookupColsCard" style="display:none">
+      <div style="font-weight:600;margin-bottom:10px">Columns to add from Master Data:</div>
+      <div id="xlLookupColsList"></div>
+    </div>
+    <button class="btn primary" id="xlLookupDownloadBtn" style="display:none" onclick="runExcelLookupAndDownload()">Process &amp; Download</button>
   </div>
 
   <!-- SUMMARY -->
@@ -756,7 +782,10 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 <script>
 /* ====================== CONFIG ====================== */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbxlAyVLgkA2aE0-F7gUyL0-RBzECuIGfpNSgy3Ens_kCkayH6D_oR7cS9f8LV_tlHE/exec",
+  API_URL: "https://script.google.com/macros/s/AKfycbyjIoOr0-s-QL-5tFa65mdNu6L12CHyTDVPV8NwYXMOkoVqGLS81LiL_3burFOHsfO3/exec",
+  // Path to the manually-exported MasterData CSV, relative to index.html.
+  // Update this if the file ever lives somewhere else in the repo.
+  MASTER_DATA_CSV_URL: "masterdata.csv",
   // Separate Apps Script Web App deployment — the "Daily Visit MIS" handler
   // bound to the "Daily Contribution Report" spreadsheet's "Merged Data" tab.
   // It expects a raw { answers: {...} } body (question-id keys), no "action"
@@ -948,7 +977,7 @@ history.replaceState({screen:'screen-login'}, '', location.href);
       armHomeBackExit();
       return;
     }
-    const childIds = ['screen-docslocker','screen-summary','screen-mastersearch','screen-visitreport'];
+    const childIds = ['screen-docslocker','screen-summary','screen-mastersearch','screen-exceltool','screen-visitreport'];
     if(childIds.some(id=>document.getElementById(id).classList.contains('active'))){
       // Don't depend on WebView history (it can be empty after a reload).
       replaceScreen('screen-dashboard', 'back');
@@ -1128,6 +1157,157 @@ function unlockNotifAudio(){
   try{ notifAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){}
 }
 ['pointerdown','click','touchend','keydown'].forEach(t=>document.addEventListener(t, unlockNotifAudio, {once:true, passive:true}));
+
+/* ====================== EXCEL LOOKUP TOOL ======================
+ * Rep uploads an Excel/CSV file; any column recognized as a Share Code,
+ * Bizom ID, or Mobile Number is used to look each row up in MasterData
+ * (loaded from CONFIG.MASTER_DATA_CSV_URL — the manually-exported CSV
+ * sitting next to index.html in the repo); the rep picks which MasterData
+ * columns to add, then downloads the result as a new .xlsx file.
+ *
+ * Fully data-driven: nothing here hardcodes MasterData's non-identifier
+ * column names, so it works with whatever columns actually exist in
+ * masterdata.csv without needing code changes when that file's schema
+ * changes. Only the three identifier columns' NAMES are recognized by
+ * alias (mirroring the backend's Master Search matching) — their
+ * VALUES are never assumed. */
+
+let masterDataRows = null;    // array of row objects, keyed by CSV header, once loaded
+let masterDataHeaders = null; // CSV header names, in original order
+let masterDataLoadPromise = null;
+
+function loadMasterData(){
+  if(masterDataLoadPromise) return masterDataLoadPromise;
+  masterDataLoadPromise = new Promise((resolve, reject)=>{
+    Papa.parse(CONFIG.MASTER_DATA_CSV_URL, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: (res)=>{
+        masterDataRows = res.data;
+        masterDataHeaders = res.meta.fields || [];
+        resolve({rows: masterDataRows, headers: masterDataHeaders});
+      },
+      error: (err)=>{ masterDataLoadPromise = null; reject(err); }
+    });
+  });
+  return masterDataLoadPromise;
+}
+
+// Same three identifier columns Master Search matches against on the
+// backend (see handleMasterSearch in code.gs) — kept in sync with those
+// aliases so a column is recognized the same way on both sides.
+const LOOKUP_KEY_ALIASES = {
+  shareCode: ['sharecode','workshopcode'],
+  bizomId:   ['bizomid'],
+  mobile:    ['mobile','mobilenumber','mobileno','phonenumber','userid']
+};
+function xlEsc(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function xlNormKey(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+function detectLookupColumns(headers){
+  const normed = headers.map(h=>({orig:h, norm:xlNormKey(h)}));
+  const out = {};
+  Object.keys(LOOKUP_KEY_ALIASES).forEach(key=>{
+    const found = normed.find(h=>LOOKUP_KEY_ALIASES[key].includes(h.norm));
+    out[key] = found ? found.orig : null;
+  });
+  return out;
+}
+
+let xlUploadHeaders = null; // uploaded file's own column headers, in order
+let xlUploadRows = null;    // uploaded rows, each keyed by xlUploadHeaders
+let xlUploadLookupCols = null;
+let xlMasterLookupCols = null;
+
+async function onExcelLookupFileSelected(e){
+  const file = e.target.files && e.target.files[0];
+  const statusEl = document.getElementById('xlLookupStatus');
+  const colsCard = document.getElementById('xlLookupColsCard');
+  const downloadBtn = document.getElementById('xlLookupDownloadBtn');
+  colsCard.style.display = 'none';
+  downloadBtn.style.display = 'none';
+  statusEl.style.display = 'block';
+  if(!file){ statusEl.textContent = ''; statusEl.style.display = 'none'; return; }
+
+  statusEl.textContent = 'Reading file…';
+  try{
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, {type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+    if(!aoa.length){ statusEl.textContent = 'That file looks empty.'; return; }
+    xlUploadHeaders = aoa[0].map(h=>String(h).trim());
+    xlUploadRows = aoa.slice(1).map(row=>{
+      const obj = {};
+      xlUploadHeaders.forEach((h,i)=> obj[h] = row[i] !== undefined ? row[i] : '');
+      return obj;
+    });
+
+    statusEl.textContent = 'Loading Master Data…';
+    await loadMasterData();
+
+    xlUploadLookupCols = detectLookupColumns(xlUploadHeaders);
+    xlMasterLookupCols = detectLookupColumns(masterDataHeaders);
+    const usableKeys = Object.keys(LOOKUP_KEY_ALIASES).filter(k=>xlUploadLookupCols[k] && xlMasterLookupCols[k]);
+
+    if(!usableKeys.length){
+      statusEl.textContent = 'No Share Code, Bizom ID, or Mobile Number column found in this file (or in masterdata.csv) to match on.';
+      return;
+    }
+
+    const foundDesc = usableKeys.map(k=>`"${xlUploadLookupCols[k]}"`).join(', ');
+    statusEl.textContent = `${xlUploadRows.length} rows loaded. Matching on: ${foundDesc}.`;
+
+    const listEl = document.getElementById('xlLookupColsList');
+    listEl.innerHTML = masterDataHeaders.map((h,i)=>`
+      <div class="xlColRow">
+        <input type="checkbox" id="xlCol_${i}" value="${xlEsc(h)}">
+        <label for="xlCol_${i}">${xlEsc(h)}</label>
+      </div>`).join('');
+    colsCard.style.display = 'block';
+    downloadBtn.style.display = 'block';
+  }catch(err){
+    statusEl.textContent = 'Could not read that file, or masterdata.csv is missing from the repo. (' + err + ')';
+  }
+}
+
+function findMasterMatch(uploadRow){
+  const order = ['shareCode','bizomId','mobile'];
+  for(const key of order){
+    const uploadCol = xlUploadLookupCols[key];
+    const masterCol = xlMasterLookupCols[key];
+    if(!uploadCol || !masterCol) continue;
+    const val = String(uploadRow[uploadCol] ?? '').trim().toLowerCase();
+    if(!val) continue;
+    const match = masterDataRows.find(r => String(r[masterCol] ?? '').trim().toLowerCase() === val);
+    if(match) return match;
+  }
+  return null;
+}
+
+function runExcelLookupAndDownload(){
+  const selectedCols = Array.from(document.querySelectorAll('#xlLookupColsList input:checked')).map(el=>el.value);
+  if(!selectedCols.length){ toast('Pick at least one column to add.'); return; }
+
+  let matchedCount = 0;
+  const outHeaders = xlUploadHeaders.concat(selectedCols);
+  const outRows = xlUploadRows.map(row=>{
+    const match = findMasterMatch(row);
+    if(match) matchedCount++;
+    const outRow = xlUploadHeaders.map(h=>row[h]);
+    selectedCols.forEach(c=> outRow.push(match ? (match[c] ?? '') : ''));
+    return outRow;
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([outHeaders, ...outRows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Result');
+  XLSX.writeFile(wb, 'lookup_result.xlsx');
+
+  toast(`Done — ${matchedCount} of ${xlUploadRows.length} rows matched.`);
+}
 
 function formatPJP(raw){
   if(!raw) return '<div class="muted">No beat plan set for today.</div>';
