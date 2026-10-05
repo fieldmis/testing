@@ -667,7 +667,6 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
     <button class="btn primary" id="startDayBtn" onclick="handleStartDay()">Start the Day</button>
     <button class="btn" id="visitReportBtn" style="display:none;" onclick="showScreen('screen-visitreport')">Submit Visit Report</button>
     <button class="btn" onclick="showScreen('screen-mastersearch')">Master Search</button>
-    <button class="btn" onclick="showScreen('screen-exceltool')">Excel Lookup</button>
     <button class="btn" onclick="openSummary()">Summary</button>
     <button class="btn" onclick="openDocsLocker()">Docs Locker</button>
     <button class="btn danger" id="endDayBtn" onclick="handleEndDay()">End the Day</button>
@@ -701,6 +700,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
       <input type="text" id="searchInput" placeholder="Share Code / Mobile Number / Bizom ID">
       <button class="btn primary" style="margin:0" id="searchBtn" onclick="doMasterSearch()">Search</button>
     </div>
+    <button class="btn" style="width:100%" onclick="showScreen('screen-exceltool')">Excel Lookup ›</button>
     <div id="searchResults"></div>
   </div>
 
@@ -954,7 +954,7 @@ history.replaceState({screen:'screen-login'}, '', location.href);
       armHomeBackExit();
       return;
     }
-    const childIds = ['screen-docslocker','screen-summary','screen-mastersearch','screen-exceltool','screen-visitreport'];
+    const childIds = ['screen-docslocker','screen-summary','screen-mastersearch','screen-visitreport'];
     if(childIds.some(id=>document.getElementById(id).classList.contains('active'))){
       // Don't depend on WebView history (it can be empty after a reload).
       replaceScreen('screen-dashboard', 'back');
@@ -2305,26 +2305,43 @@ const VisitForm = (function(){
     26: { keyType:'bizomId',   fills:{27:'Outletname'} }
   };
 
+  // Finds the actual MasterData header matching `name`, ignoring case and
+  // stray spaces — a configured fill name like "Linked Bizom" must match
+  // whatever the real CSV header is, which is parsed exactly as it sits
+  // in the sheet (case/whitespace and all). Resolving it this way (same
+  // trim+lowercase approach used elsewhere) means a minor difference
+  // between the name Harshad gave in chat and the sheet's real header no
+  // longer silently breaks that field's autofill.
+  function resolveMasterDataHeader(name){
+    const target = String(name).trim().toLowerCase();
+    return masterDataHeaders.find(h => String(h).trim().toLowerCase() === target) || null;
+  }
+
   async function handleAutofillBlur(qid){
     const rule = AUTOFILL_RULES[qid];
     const el = document.getElementById(`vfInput_${qid}`);
     if(!rule || !el) return;
     const keyVal = String(el.value || '').trim();
-    if(!keyVal) return;
-    try{ await loadMasterData(); }catch(e){ return; }
-    if(!masterDataHeaders) return;
+    if(!keyVal){ console.log(`[autofill] Q${qid} blurred empty — skipping`); return; }
+    try{ await loadMasterData(); }catch(e){ console.warn('[autofill] masterdata.csv failed to load:', e); return; }
+    if(!masterDataHeaders || !masterDataHeaders.length){ console.warn('[autofill] no masterdata.csv headers loaded'); return; }
     const masterCol = detectLookupColumns(masterDataHeaders)[rule.keyType];
-    if(!masterCol) return;
+    if(!masterCol){ console.warn(`[autofill] Q${qid}: no "${rule.keyType}" column recognized in masterdata.csv headers`, masterDataHeaders); return; }
     const match = masterDataRows.find(r => String(r[masterCol] || '').trim().toLowerCase() === keyVal.toLowerCase());
-    if(!match) return;
+    if(!match){ console.log(`[autofill] Q${qid}: "${keyVal}" not found in masterdata.csv column "${masterCol}"`); return; }
+    console.log(`[autofill] Q${qid}: matched "${keyVal}" — filling`, Object.keys(rule.fills));
     Object.keys(rule.fills).forEach(targetQid=>{
-      if(answers[targetQid]) return; // already has a value — don't overwrite
+      if(answers[targetQid]){ console.log(`[autofill] Q${targetQid} already has a value — not overwriting`); return; }
       const targetEl = document.getElementById(`vfInput_${targetQid}`);
       if(!targetEl || targetEl.value) return;
-      const val = match[rule.fills[targetQid]];
-      if(val === undefined || val === null || val === '') return;
+      const configuredName = rule.fills[targetQid];
+      const realCol = resolveMasterDataHeader(configuredName);
+      if(!realCol){ console.warn(`[autofill] Q${targetQid}: no "${configuredName}" column found in masterdata.csv headers`, masterDataHeaders); return; }
+      const val = match[realCol];
+      if(val === undefined || val === null || val === ''){ console.log(`[autofill] Q${targetQid}: matched row's "${realCol}" is blank`); return; }
       targetEl.value = val;
       answers[targetQid] = String(val).trim();
+      console.log(`[autofill] Q${targetQid} filled from "${realCol}":`, val);
     });
   }
 
@@ -2477,6 +2494,8 @@ const VisitForm = (function(){
     answers = {};
     history = [];
     currentPage = 'p1';
+
+    loadMasterData().catch(()=> console.warn('[autofill] masterdata.csv failed to preload — autofill will be unavailable this visit')); // fire-and-forget, so it's ready well before Q15/18/26
 
     // ---- DB tagging (Question 1) ----
     const uid = (session && session.userId) ? String(session.userId).trim() : '';
@@ -2679,12 +2698,22 @@ async function doMasterSearch(){
   setBtnLoading(btn, true);
   resultsDiv.innerHTML = `<div class="card">${orbitLoaderHTML('Searching…')}</div>`;
   try{
-    const r = await api('masterSearch', {query:q});
-    if(!r.ok || !r.rows || r.rows.length===0){
+    await loadMasterData(); // reads masterdata.csv from the repo (cached after the first call)
+    if(!masterDataHeaders || !masterDataHeaders.length){
+      resultsDiv.innerHTML = '<div class="card">Master data isn\'t available — masterdata.csv may be missing from the repo.</div>';
+      return;
+    }
+    const searchCols = Object.values(detectLookupColumns(masterDataHeaders)).filter(Boolean);
+    const qLower = q.toLowerCase();
+    const matched = masterDataRows.filter(row =>
+      searchCols.some(col => String(row[col] ?? '').trim().toLowerCase() === qLower)
+    );
+    if(!matched.length){
       resultsDiv.innerHTML = '<div class="card">No result found.</div>'; return;
     }
-    resultsDiv.innerHTML = rowsToTable(r.headers, r.rows);
-  }catch(e){ resultsDiv.innerHTML = '<div class="card">Search failed. Check connection.</div>'; }
+    const rows = matched.map(row => masterDataHeaders.map(h => ({label:h, value: row[h]})));
+    resultsDiv.innerHTML = rowsToTable(masterDataHeaders, rows);
+  }catch(e){ resultsDiv.innerHTML = '<div class="card">Search failed — masterdata.csv may be missing from the repo.</div>'; }
   finally{ setBtnLoading(btn, false); }
 }
 document.getElementById('searchInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doMasterSearch(); });
