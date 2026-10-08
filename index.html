@@ -2052,7 +2052,8 @@ const VisitForm = (function(){
 
     p4:{ title:"New Enrollment Details", ids:[15,16,17], branch:()=>"pFinal" },
 
-    p5:{ title:"Focus Outlet Linked / Existing Mechanic Details", ids:[18,19,20,21,22,23,24,25],
+    p5:{ title:"Focus Outlet Linked / Existing Mechanic Details", ids:[18,19,20,21,22,23,24],
+         conditional:{ trigger:24, showValue:["SHA Campaign","Inactive to Active","Activate With 5 Coupons"], extraIds:[25] },
          branch:()=>"pFinal" },
 
     p6:{ title:"Focus/Existing Outlet Details", ids:[26,27,28,29,30],
