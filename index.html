@@ -1924,6 +1924,7 @@ const VisitForm = (function(){
     "Rajdeep Automotives",
     "SHREE KRISHNA AGENCIES",
     "SRI SAINATH AGENCIES"
+    "Sukan Incorporation"
   ];
   const SEGMENTS = ["MCO","CVO","PCO","LCV","AGRI"];
 
@@ -1948,12 +1949,10 @@ const VisitForm = (function(){
     2:{ type:"radio", label:"Type of Visit", required:true,
         options:[
           {label:"New Outlet Visit", value:"New Outlet Visit"},
+          {label:"Existing Outlet Visit", value:"Existing Outlet Visit"},
           {label:"New Mechanic Visit", value:"New Mechanic Visit"},
-          {label:"Focus Outlet Visit", value:"Focus Outlet Visit"},
-          {label:"Focus Outlet Linked Mechanic Visit", value:"Focus Outlet Linked Mechanic Visit"},
-          {label:"Existing Retailer / IWS Visit", value:"Existing Retailer / IWS Visit"},
           {label:"Existing Mechanic Visit", value:"Existing Mechanic Visit"},
-          {label:"DB Meet", value:"DB Meet"}
+          {label:"Distributor Meet", value:"Distributor Meet"}
         ]},
 
     3:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name (2-100 characters)." },
@@ -1963,7 +1962,7 @@ const VisitForm = (function(){
     7:{ type:"radio", label:"Outcome of the Visit", required:true,
         options:[
           {label:"Order Collected", value:"Order Collected"},
-          {label:"Follow Up", value:"Follow Up"},
+          {label:"Follow Up Required", value:"Follow Up Required"},
           {label:"Support Required for Conversion to Shell", value:"Support Required for Conversion to Shell"}
         ]},
     8:{ type:"number", label:"Collected Order Volume ( In Liters )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
@@ -1977,7 +1976,7 @@ const VisitForm = (function(){
          options:[
            {label:"New Enrollment", value:"New Enrollment"},
            {label:"New Enrollment-Focus Outlet", value:"New Enrollment-Focus Outlet"},
-           {label:"Follow Up", value:"Follow Up"},
+           {label:"Follow Up Required", value:"Follow Up Required"},
            {label:"Support Required for Conversion to Shell", value:"Support Required for Conversion to Shell"}
          ]},
 
@@ -2012,9 +2011,9 @@ const VisitForm = (function(){
            {label:"First Time Premium Product Placement", value:"First Time Premium Product Placement"},
            {label:"Order Already Collected by DSR", value:"Order Already Collected by DSR"},
            {label:"Stock Available", value:"Stock Available"},
-           {label:"Payment / Outstanding Issue", value:"Payment / Outstanding Issue"},
-           {label:"Follow up", value:"Follow up"},
            {label:"Issue Resolution", value:"Issue Resolution"},
+           {label:"Payment / Outstanding Issue", value:"Payment / Outstanding Issue"},
+           {label:"Follow Up Required", value:"Follow Up Required"},           
            {label:"Other", value:"__other__", other:true}
          ]},
 
@@ -2028,13 +2027,11 @@ const VisitForm = (function(){
     p1:{ title:"Daily Visit MIS", ids:[1,2],
          branch:(a)=>{
            const v = a[2] && a[2].choice;
-           if(v === "DB Meet") return "SUBMIT";
+           if(v === "Distributor Meet") return "SUBMIT";
            const map = {
              "New Outlet Visit":"p2",
-             "New Mechanic Visit":"p3",
-             "Focus Outlet Visit":"p6",
-             "Focus Outlet Linked Mechanic Visit":"p5",
-             "Existing Retailer / IWS Visit":"p6",
+             "New Mechanic Visit":"p3",             
+             "Existing Outlet Visit":"p6",
              "Existing Mechanic Visit":"p5"
            };
            return map[v] || "p2";
@@ -2059,7 +2056,7 @@ const VisitForm = (function(){
     p6:{ title:"Focus/Existing Outlet Details", ids:[26,27,28,29,30],
          branch:(a)=>{
            const v = a[30] && a[30].choice;
-           const toP8 = ["Order Already Collected by DSR","Stock Available","Payment / Outstanding Issue","Follow up"];
+           const toP8 = ["Order Already Collected by DSR","Stock Available","Payment / Outstanding Issue","Follow Up Required"];
            if(v === "Issue Resolution" || v === "__other__") return "pFinal";
            if(toP8.includes(v)) return "p8";
            return "p7";
@@ -2584,7 +2581,7 @@ const VisitForm = (function(){
         <div class="vfDoneMark">&#10003;</div>
         <h2 id="vfDoneTitle">Submitting…</h2>
         <p id="vfDoneMsg">Sending your responses to the tracker sheet…</p>
-        <div class="vfSummary">${lines.length ? vfEsc(lines.join('\n\n')) : '(DB Meet — no further details required.)'}</div>
+        <div class="vfSummary">${lines.length ? vfEsc(lines.join('\n\n')) : '(Distributor Meet — no further details required.)'}</div>
         <button class="btn primary" type="button" onclick="showScreen('screen-dashboard')">Back to Dashboard</button>
       </div>
     `;
