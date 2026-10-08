@@ -2170,7 +2170,7 @@ const VisitForm = (function(){
 
     if(page.conditional){
       const trig = answers[page.conditional.trigger];
-      const show = trig && trig.choice === page.conditional.showValue;
+      const show = trig && ( Array.isArray(page.conditional.showValue) ? page.conditional.showValue.includes(trig.choice) : trig.choice === page.conditional.showValue );
       html += `<div class="vfExtraGroup ${show?'':'hidden'}" id="vfExtraGroup_${pageId}">`;
       extraIds.forEach(qid=>{ html += qblockHtml(qid); });
       html += `</div>`;
@@ -2260,7 +2260,7 @@ const VisitForm = (function(){
         if(page.conditional && Number(qid) === page.conditional.trigger){
           const extraGroup = document.getElementById(`vfExtraGroup_${pageId}`);
           if(extraGroup){
-            extraGroup.classList.toggle('hidden', radio.value !== page.conditional.showValue);
+            extraGroup.classList.toggle( 'hidden', Array.isArray(page.conditional.showValue) ? !page.conditional.showValue.includes(radio.value) : radio.value !== page.conditional.showValue );
           }
         }
         if(BRANCH_TRIGGER[pageId] === Number(qid)) maybeAutoAdvance(pageId);
@@ -2419,7 +2419,7 @@ const VisitForm = (function(){
       // block below deleted answers[8]/answers[9] before they were ever
       // read — the values never reached finishSubmit() or the Sheet.
       const triggerEl = card.querySelector(`input[name="vfRadio_${page.conditional.trigger}"]:checked`);
-      extraActive = !!triggerEl && triggerEl.value === page.conditional.showValue;
+      extraActive = !!triggerEl && ( Array.isArray(page.conditional.showValue) ? page.conditional.showValue.includes(triggerEl.value) : triggerEl.value === page.conditional.showValue );
     }
     let valid = true;
     let firstInvalidId = null;
@@ -2540,7 +2540,7 @@ const VisitForm = (function(){
         const extraIds = page.conditional.extraIds;
         mainIds = page.ids.filter(id=>!extraIds.includes(id));
         const trig = answers[page.conditional.trigger];
-        const extraActive = trig && trig.choice === page.conditional.showValue;
+        const extraActive = trig && ( Array.isArray(page.conditional.showValue) ? page.conditional.showValue.includes(trig.choice) : trig.choice === page.conditional.showValue );
         if(extraActive) mainIds = mainIds.concat(extraIds);
       }
       ids = ids.concat(mainIds);
