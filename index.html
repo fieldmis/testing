@@ -1941,7 +1941,8 @@ const VisitForm = (function(){
     "D91689": ["JS Diesel Spares"],
     "D74545": ["MANISHA ENTERPRISES"],
     "D69561": ["MUKTI TRADERS", "SHREE KRISHNA AGENCIES"],
-    "D73116": ["Rajdeep Automotives", "SRI SAINATH AGENCIES"]
+    "D73116": ["Rajdeep Automotives", "SRI SAINATH AGENCIES"],
+    "D97501": ["Sukan Incorporation"]
   };
 
   const Q = {
@@ -1975,7 +1976,6 @@ const VisitForm = (function(){
     14:{ type:"radio", label:"Outcome of the Visit", required:true,
          options:[
            {label:"New Enrollment", value:"New Enrollment"},
-           {label:"New Enrollment-Focus Outlet", value:"New Enrollment-Focus Outlet"},
            {label:"Follow Up Required", value:"Follow Up Required"},
            {label:"Support Required for Conversion to Shell", value:"Support Required for Conversion to Shell"}
          ]},
@@ -1998,7 +1998,7 @@ const VisitForm = (function(){
            {label:"Issue Resolution", value:"Issue Resolution"},
            {label:"Other", value:"__other__", other:true}
          ]},
-    25:{ type:"textarea", label:"Remarks of the Outcome ( Mentioned Number of Coupons Scanned against Target )", placeholder:"For Inactive to Active & Activate with 5 Coupons, Only mention number of coupons scanned e.g. 4. And for MLP Mention Target=Actual e.g. 5=3", required:true, rx:RX.other, err:"Enter a remark of at least 5 characters." },
+    25:{ type:"textarea", label:"Mentione Number of Coupons Scanned", placeholder:"For Inactive to Active & Activate with 5 Coupons, Only mention number of coupons scanned e.g. 4. And for MLP Mention Target=Actual e.g. 5=3", required:true, rx:RX.other, err:"Enter a remark of at least 5 characters." },
 
     26:{ type:"text", label:"Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
     27:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name." },
@@ -2044,16 +2044,16 @@ const VisitForm = (function(){
     p3:{ title:"New Mechanic Visit Details", ids:[10,11,12,13,14],
          branch:(a)=>{
            const v = a[14] && a[14].choice;
-           return (v === "New Enrollment" || v === "New Enrollment-Focus Outlet") ? "p4" : "pFinal";
+           return (v === "New Enrollment" ) ? "p4" : "pFinal";
          }},
 
     p4:{ title:"New Enrollment Details", ids:[15,16,17], branch:()=>"pFinal" },
 
-    p5:{ title:"Focus Outlet Linked / Existing Mechanic Details", ids:[18,19,20,21,22,23,24],
+    p5:{ title:"Mechanic Details", ids:[18,19,20,21,22,23,24],
          conditional:{ trigger:24, showValue:["SHA Campaign","Inactive to Active","Activate With 5 Coupons"], extraIds:[25] },
          branch:()=>"pFinal" },
 
-    p6:{ title:"Focus/Existing Outlet Details", ids:[26,27,28,29,30],
+    p6:{ title:"Outlet Details", ids:[26,27,28,29,30],
          branch:(a)=>{
            const v = a[30] && a[30].choice;
            const toP8 = ["Order Already Collected by DSR","Stock Available","Payment / Outstanding Issue","Follow Up Required"];
@@ -2062,7 +2062,7 @@ const VisitForm = (function(){
            return "p7";
          }},
 
-    p7:{ title:"Ordered Volume for Focus / Existing Outlet", ids:[31], branch:()=>"pFinal" },
+    p7:{ title:"Ordered Volume in Ltrs", ids:[31], branch:()=>"pFinal" },
 
     p8:{ title:"Next Course Of Action", ids:[32], branch:()=>"pFinal" },
 
