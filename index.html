@@ -2642,39 +2642,51 @@ const VisitForm = (function(){
     return parts.filter(p=>p).join(' – ');
   }
 
-  // Builds the WhatsApp caption for the visit-end selfie: one line per
-  // header, each from whichever mapped question group was actually
-  // answered on this visit (only one branch of the form is ever filled
-  // in for a given visit, so the other group is simply blank).
+  // Builds the WhatsApp caption for the visit-end selfie. The lines are
+  // chosen by the Type of Visit that was picked (question 2), so answers
+  // from a different branch can never leak into the caption.
+  //   New Outlet Visit        -> Outlet Name (3), Outcome (7)
+  //   New Mechanic Visit      -> Mechanic Name (10), Linked Outlet (17, only
+  //                              when New Enrollment), Outcome (14)
+  //   Existing Mechanic Visit -> Share ID-Linked Bizom (18 & 22), Linked
+  //                              Outlet (23), Outcome (24 & 25)
+  //   Existing Outlet Visit   -> Bizom ID (26 & 27), Outcome (30 + 31/32)
+  //   Distributor Meet        -> visit type only
+  // Remarks (33) are added last whenever they were answered.
   function getCaption(){
     const lines = [];
-    
+    const add = (label, value) => { if(value) lines.push(`${label}: ${value}`); };
+
     const visitType = captionAnswerText(2);
     if(visitType) lines.push(visitType);
 
-    // Share ID/Bizom ID: 18&22 (Focus Outlet Linked / Existing Mechanic)
-    // or 26&27 (Focus/Existing Outlet)
-    let idLine = captionJoin([captionAnswerText(18), captionAnswerText(22)]);
-    if(!idLine) idLine = captionJoin([captionAnswerText(26), captionAnswerText(27)]);
-    if(idLine) lines.push(`Share ID/Bizom ID: ${idLine}`);
+    if(visitType === 'New Outlet Visit'){
+      add('Outlet Name', captionAnswerText(3));
+      add('Outcome', captionAnswerText(7));
 
-    // Outcome: 24&25 (Focus Outlet Linked / Existing Mechanic) or
-    // 30&(31 Ltr / "Volume Plan"&32) (Focus/Existing Outlet)
-    let outcomeLine = captionJoin([captionAnswerText(24), captionAnswerText(25)]);
-    if(!outcomeLine){
+    } else if(visitType === 'New Mechanic Visit'){
+      add('Mechanic Name', captionAnswerText(10));
+      add('Linked Outlet', captionAnswerText(17));
+      add('Outcome', captionAnswerText(14));
+
+    } else if(visitType === 'Existing Mechanic Visit'){
+      add('Share ID-Linked Bizom', captionJoin([captionAnswerText(18), captionAnswerText(22)]));
+      add('Linked Outlet', captionAnswerText(23));
+      add('Outcome', captionJoin([captionAnswerText(24), captionAnswerText(25)]));
+
+    } else if(visitType === 'Existing Outlet Visit'){
+      add('Bizom ID', captionJoin([captionAnswerText(26), captionAnswerText(27)]));
       const q30 = captionAnswerText(30);
       const q31 = captionAnswerText(31);
       const q32 = captionAnswerText(32);
       let tail = '';
       if(q31) tail = `${q31} Ltr`;
       else if(q32) tail = captionJoin(['Volume Plan', q32]);
-      outcomeLine = tail ? captionJoin([q30, tail]) : q30;
+      add('Outcome', tail ? captionJoin([q30, tail]) : q30);
     }
-    if(outcomeLine) lines.push(`Outcome: ${outcomeLine}`);
 
     // Remarks: 33 (Final Remarks — always the last page before submit)
-    const remarks = captionAnswerText(33);
-    if(remarks) lines.push(`Remarks: ${remarks}`);
+    add('Remarks', captionAnswerText(33));
 
     return lines.join('\n');
   }
@@ -2937,6 +2949,26 @@ function finishLogout(){
   replaceScreen('screen-login', 'back');
 }
 
+/* ====================== FORCE LOGOUT (admin sets ForceLogout = Y in Users sheet) ======================
+ * Checked only when the app opens or returns to the foreground — no timer
+ * polling. A failed/offline check NEVER logs the user out. */
+let _forceLogoutBusy = false;
+async function checkForceLogout(){
+  if(!session || _forceLogoutBusy) return;
+  _forceLogoutBusy = true;
+  try{
+    const r = await api('checkSession', {userId: session.userId});
+    if(r && r.ok && r.forceLogout){
+      toast('You were logged out by admin. Please log in again.');
+      finishLogout();
+    }
+  }catch(e){ /* network/backend error: stay logged in */ }
+  finally{ _forceLogoutBusy = false; }
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible') checkForceLogout();
+});
+
 /* ====================== MIDNIGHT AUTO-LOGOUT ====================== */
 function scheduleMidnightLogout(){
   const now = new Date();
@@ -2993,6 +3025,7 @@ if(session && session.date === todayStr()){
   if(log.some(p=>p.type==='end')) dayEnded = true;
   updateDashboardButtons();
   restoreScreenAfterReload();
+  checkForceLogout();
 } else if(session && session.date !== todayStr()){
   // Session left over from a previous day (app was closed before the
   // midnight auto-logout could run) — clear it so PIN is required again.
