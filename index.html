@@ -569,6 +569,46 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#aebbd0;white-space:pre-wrap;}
 .vfDone .btn.primary{margin-top:4px;}
 
+
+/* Pending-sync notice + share prompt */
+.syncBadge{display:none;width:100%;margin:0 0 14px;padding:10px 14px;border-radius:14px;
+  border:1px solid rgba(255,196,87,.38);background:rgba(255,196,87,.12);color:#ffd27a;
+  font:inherit;font-size:.84rem;font-weight:600;text-align:left;cursor:pointer;}
+.sharePrompt{position:fixed;inset:0;z-index:400;display:flex;align-items:flex-end;justify-content:center;
+  padding:22px;background:rgba(5,8,16,.72);}
+.sharePrompt .card{width:100%;max-width:440px;margin:0;}
+.sharePromptTitle{font-weight:700;margin-bottom:14px;color:#edf4ff;}
+.sharePrompt .btn{margin:0 0 12px;}
+
+/* Visit form: live character counter + self-drawing tick */
+.vfInputBox{position:relative;}
+.vfInputBox input[type=text],.vfInputBox textarea{padding-right:104px;}
+.vfCounter{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:none;pointer-events:none;
+  font-size:.72rem;font-weight:700;letter-spacing:.2px;white-space:nowrap;color:#ff9aa2;
+  background:rgba(255,95,109,.14);border:1px solid rgba(255,95,109,.4);border-radius:999px;padding:3px 10px;}
+.vfInputBox.isArea .vfCounter{top:auto;bottom:10px;right:26px;transform:none;}
+.vfFieldWrap.cx-bad .vfCounter{display:block;}
+/* red glow until the pattern is met (also while the box is focused) */
+.vfFieldWrap.cx-bad .vfInputBox input[type=text],
+.vfFieldWrap.cx-bad .vfInputBox textarea,
+.vfFieldWrap.cx-bad .vfInputBox input[type=text]:focus,
+.vfFieldWrap.cx-bad .vfInputBox textarea:focus{
+  border-color:#ff5f6d;
+  box-shadow:inset 0 5px 16px rgba(0,0,0,.3),0 0 0 3px rgba(255,95,109,.18),0 0 20px rgba(255,95,109,.4);}
+.vfTick{position:absolute;right:13px;top:50%;width:22px;height:22px;margin-top:-11px;display:none;pointer-events:none;}
+.vfInputBox.isArea .vfTick{top:auto;bottom:11px;right:27px;margin-top:0;}
+.vfFieldWrap.cx-ok .vfTick{display:block;}
+.vfTick svg{display:block;width:22px;height:22px;overflow:visible;}
+.vfTickRing,.vfTickCheck{fill:none;stroke:#2fd27c;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+.vfTickRing{stroke-dasharray:64;stroke-dashoffset:64;transform:rotate(-90deg);transform-origin:12px 12px;}
+.vfTickCheck{stroke-dasharray:20;stroke-dashoffset:20;}
+.vfTick.draw .vfTickRing{animation:vfTickDraw .42s ease-out forwards;}
+.vfTick.draw .vfTickCheck{animation:vfTickDraw .3s ease-out .36s forwards;}
+.vfTick.still .vfTickRing,.vfTick.still .vfTickCheck{stroke-dashoffset:0;}
+@keyframes vfTickDraw{to{stroke-dashoffset:0;}}
+@media (prefers-reduced-motion:reduce){
+  .vfTick.draw .vfTickRing,.vfTick.draw .vfTickCheck{animation:none;stroke-dashoffset:0;}
+}
 </style>
 </head>
 <body>
@@ -664,6 +704,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
       </div>
     </div>
 
+    <button class="syncBadge" id="syncBadge" type="button" style="display:none" onclick="flushOutbox(true)"></button>
     <button class="btn primary" id="startDayBtn" onclick="handleStartDay()">Start the Day</button>
     <button class="btn" id="visitReportBtn" style="display:none;" onclick="showScreen('screen-visitreport')">Submit Visit Report</button>
     <button class="btn" onclick="showScreen('screen-mastersearch')">Master Search</button>
@@ -767,13 +808,30 @@ const CONFIG = {
   // bound to the "Daily Contribution Report" spreadsheet's "Merged Data" tab.
   // It expects a raw { answers: {...} } body (question-id keys), no "action"
   // wrapper — do not route this through API_URL/api().
-  VISIT_REPORT_SUBMIT_URL: "https://script.google.com/macros/s/AKfycby4iTnuXi_vbLAB-YgzSJ2AfIbHoa9Y5WB0GOPnZpM6PE2p3uNb8ScOtHVOnHFRmLoAFQ/exec",
-  WHATSAPP_GROUP_INVITE: "https://chat.whatsapp.com/E4R9B2fVwKW2xzJT7gCopd"
+  VISIT_REPORT_SUBMIT_URL: "https://script.google.com/macros/s/AKfycby4iTnuXi_vbLAB-YgzSJ2AfIbHoa9Y5WB0GOPnZpM6PE2p3uNb8ScOtHVOnHFRmLoAFQ/exec"
 };
 
 /* ====================== STATE ====================== */
-let session = JSON.parse(localStorage.getItem('sfos_session') || 'null');
-let todayLog = JSON.parse(localStorage.getItem('sfos_today_log') || '[]');
+/* Storage can be blocked or hold bad data (in-app browsers, private mode, corruption).
+   These wrappers never throw, so a storage problem can no longer stop the whole app. */
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+function lsJson(k, fallback){ try{ const v = lsGet(k); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } }
+
+/* All dates are Indian Standard Time (IST, UTC+5:30, no daylight saving), whatever the phone's own zone is. */
+const IST_OFFSET_MS = 5.5 * 3600 * 1000;
+function istDateStr(d){ return new Date((d ? d.getTime() : Date.now()) + IST_OFFSET_MS).toISOString().slice(0,10); }
+function todayStr(){ return istDateStr(); }
+function msUntilISTMidnight(){
+  const n = Date.now() + IST_OFFSET_MS;
+  return (Math.floor(n / 86400000) + 1) * 86400000 + 5000 - n;
+}
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function newId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,10); }
+
+let session = lsJson('sfos_session', null);
+let todayLog = [];   // today's capture points for the logged-in user — see loadDayState()
 let pendingCaptureType = null;
 let lastSummaryData = null;
 let mediaStream = null;
@@ -824,9 +882,10 @@ function renderScreen(id, direction){
   const el = document.getElementById(id);
   if(direction==='back') el.classList.add('dir-back');
   el.classList.add('active');
-  if(session && id!=='screen-login') localStorage.setItem('sfos_screen', id); // for reload restore
+  if(session && id!=='screen-login') lsSet('sfos_screen', id); // for reload restore
   if(id==='screen-visitreport') VisitForm.reset();
   if(id==='screen-dashboard' && session) loadDashboardStats();
+  if(id==='screen-dashboard') renderSyncBadge();
   if(id==='screen-dashboard') ensureHomeBackGuardEntry();
 }
 let suppressHistoryPush = false; // true only while restoring a page after reload
@@ -968,9 +1027,11 @@ history.replaceState({screen:'screen-login'}, '', location.href);
   });
 })();
 
+let toastTimer = null;
 function toast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block';
-  setTimeout(()=>t.style.display='none',3000);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.style.display='none',3000);
 }
 
 function orbitLoaderHTML(label){
@@ -990,14 +1051,132 @@ function setBtnLoading(btn, loading){
     btn.disabled = false;
   }
 }
-async function api(action, payload){
-  const res = await fetch(CONFIG.API_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action, payload})
-  });
-  return res.json();
+async function api(action, payload, timeoutMs){
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), timeoutMs || 20000);
+  try{
+    const res = await fetch(CONFIG.API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action, payload}),
+      signal: ctrl.signal
+    });
+    return await res.json();
+  } finally { clearTimeout(timer); }
 }
+
+/* ====================== OUTBOX (retry queue) ======================
+ * Anything that must reach the server (location points, the visit report, the
+ * end-of-day summary) goes through this queue. It is stored on the phone, sent in
+ * order, retried with a growing delay when the network is weak, and survives the
+ * app being closed or killed. Each point carries a unique id so the server can
+ * ignore a repeat of something it already has. */
+const OUTBOX_KEY = 'sfos_outbox';
+let outbox = lsJson(OUTBOX_KEY, []);
+if(!Array.isArray(outbox)) outbox = [];
+const jobWatchers = {};   // jobId -> [callbacks]
+const jobState = {};      // jobId -> {st, res}  (last status, replayed to late watchers)
+let outboxFlushing = false;
+let outboxTimer = null;
+
+function renderSyncBadge(){
+  const el = document.getElementById('syncBadge');
+  if(!el) return;
+  const n = outbox.length;
+  if(!n){ el.style.display = 'none'; return; }
+  el.textContent = '⏳ ' + n + (n === 1 ? ' item is' : ' items are') + ' waiting to sync — tap to retry';
+  el.style.display = 'block';
+}
+function saveOutbox(){ lsSet(OUTBOX_KEY, JSON.stringify(outbox)); renderSyncBadge(); }
+
+function notifyJob(job, st, res){
+  if(st !== 'sending') jobState[job.id] = {st, res};
+  (jobWatchers[job.id] || []).slice().forEach(cb=>{ try{ cb(st, res); }catch(e){} });
+  if(st === 'sent' || st === 'failed') delete jobWatchers[job.id];
+}
+function watchJob(job, cb){
+  const last = jobState[job.id];
+  if(last) setTimeout(()=>{ try{ cb(last.st, last.res); }catch(e){} }, 0);
+  if(last && (last.st === 'sent' || last.st === 'failed')) return;
+  (jobWatchers[job.id] = jobWatchers[job.id] || []).push(cb);
+}
+function waitForJob(job, ms){
+  return new Promise(resolve=>{
+    let done = false;
+    const finish = v => { if(!done){ done = true; clearTimeout(t); resolve(v); } };
+    const t = setTimeout(()=>finish('timeout'), ms);
+    watchJob(job, st => { if(st === 'sent' || st === 'failed' || st === 'queued') finish(st); });
+  });
+}
+function enqueueJob(kind, payload){
+  const job = { id:newId(), kind, payload, tries:0, createdAt:Date.now() };
+  outbox.push(job);
+  saveOutbox();
+  flushOutbox();
+  return job;
+}
+
+async function sendJob(job){
+  try{
+    if(job.kind === 'visitReport'){
+      const res = await fetchWithTimeout(CONFIG.VISIT_REPORT_SUBMIT_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ answers: job.payload.answers })
+      }, 25000);
+      let data = null;
+      try{ data = await res.json(); }catch(e){}
+      if(data && data.status === 'ok') return {state:'done', data};
+      return {state:'retry', message: (data && data.message) || 'No readable response'};
+    }
+    const payload = Object.assign({}, job.payload);
+    if(job.kind === 'logPoint' || job.kind === 'endDay') payload.sentAt = new Date().toISOString();
+    const r = await api(job.kind, payload, job.kind === 'endDay' ? 45000 : 20000);
+    if(r && r.ok) return {state:'done', data:r};
+    if(r && r.retry) return {state:'retry', message:r.message};
+    return {state:'drop', message: r && r.message};
+  }catch(e){
+    return {state:'retry', message:String((e && e.message) || e)};
+  }
+}
+
+async function flushOutbox(force){
+  if(outboxFlushing) return;
+  outboxFlushing = true;
+  clearTimeout(outboxTimer);
+  try{
+    while(outbox.length){
+      if(navigator.onLine === false){ outbox.forEach(j=>notifyJob(j, 'queued', {message:'offline'})); break; }
+      const job = outbox[0];
+      if(!force && job.nextAt && job.nextAt > Date.now()) break;
+      force = false;
+      notifyJob(job, 'sending');
+      const out = await sendJob(job);
+      if(out.state === 'done'){
+        outbox.shift(); saveOutbox();
+        notifyJob(job, 'sent', out.data);
+        continue;
+      }
+      const maxTries = job.kind === 'visitReport' ? 6 : 12;
+      if(out.state === 'drop' || ++job.tries >= maxTries){
+        outbox.shift(); saveOutbox();
+        notifyJob(job, 'failed', out);
+        continue;
+      }
+      job.nextAt = Date.now() + Math.min(15 * 60000, 15000 * Math.pow(2, job.tries));
+      saveOutbox();
+      outbox.forEach(j=>notifyJob(j, 'queued', out));   // everything waiting behind it is waiting too
+      break;
+    }
+  } finally {
+    outboxFlushing = false;
+    if(outbox.length){
+      const wait = Math.max(5000, (outbox[0].nextAt || 0) - Date.now());
+      outboxTimer = setTimeout(()=>flushOutbox(false), Math.min(wait, 5 * 60000));
+    }
+  }
+}
+window.addEventListener('online', ()=>flushOutbox(true));
 
 /* ====================== MASTER DATA (shared loader) ======================
  * Loads CONFIG.MASTER_DATA_CSV_URL (the manually-exported MasterData CSV
@@ -1161,8 +1340,8 @@ function formatPJP(raw){
   let items = text.split(/\r?\n|;/).map(s=>s.trim()).filter(Boolean);
   if(items.length <= 1) items = text.split(/(?=\d+[\.\)])/).map(s=>s.trim()).filter(Boolean);
   if(items.length <= 1) items = text.split(',').map(s=>s.trim()).filter(Boolean);
-  if(items.length <= 1) return `<div>${text}</div>`;
-  return '<ul class="pjpList">' + items.map(i=>`<li>${i.replace(/^\d+[\.\)]\s*/,'')}</li>`).join('') + '</ul>';
+  if(items.length <= 1) return `<div>${esc(text)}</div>`;
+  return '<ul class="pjpList">' + items.map(i=>`<li>${esc(i.replace(/^\d+[\.\)]\s*/,''))}</li>`).join('') + '</ul>';
 }
 
 /* ====================== LOGIN ====================== */
@@ -1178,16 +1357,17 @@ async function doLogin(){
     const r = await api('login', {userId, pin});
     if(!r.ok){ msgEl.textContent = r.message || 'Login failed.'; return; }
     session = {userId, userName:r.userName || userId, pjp:r.pjp || '', date: todayStr()};
-    localStorage.setItem('sfos_session', JSON.stringify(session));
+    lsSet('sfos_session', JSON.stringify(session));
+    loadDayState();
     document.getElementById('pjpContent').innerHTML = formatPJP(r.pjp);
     document.getElementById('pjpUpdateBox').style.display = 'none';
     document.getElementById('confirmPjpBtn').style.display = 'block';
     document.getElementById('updatePjpBtn').style.display = 'block';
     msgEl.innerHTML = '';
     pjpPending = true;
-    localStorage.setItem('sfos_pjp_pending', '1');
+    lsSet('sfos_pjp_pending', '1');
     showScreen('screen-pjp');
-  }catch(e){ msgEl.textContent = 'Could not reach server. Check API_URL.'; }
+  }catch(e){ msgEl.textContent = (e && e.name === 'AbortError') ? 'The server is taking too long. Please try again.' : 'Could not reach the server. Check your internet and try again.'; }
   finally{ setBtnLoading(btn, false); }
 }
 
@@ -1196,7 +1376,7 @@ function confirmPjp(){
   const planText = String(session.pjp || '').trim();
   shareTextToWhatsApp(`*Todays Plan*\n\n${planText || 'No beat plan set for today.'}`).catch(()=>{});
   pjpPending = false;
-  localStorage.removeItem('sfos_pjp_pending');
+  lsDel('sfos_pjp_pending');
   replaceScreen('screen-dashboard');
   setGreeting();
   updateDashboardButtons();
@@ -1216,16 +1396,21 @@ async function submitPjpUpdate(){
   const btn = document.getElementById('submitPjpUpdateBtn');
   setBtnLoading(btn, true);
   try{
-    const r = await api('updatePJP', {userId: session.userId, pjp: newPlan});
-    if(!r.ok){ toast(r.message || 'Could not save update. Try again.'); return; }
-  }catch(e){
-    toast('Could not reach server. Update not saved.');
-    return;
+    let saved = false;
+    try{
+      const r = await api('updatePJP', {userId: session.userId, pjp: newPlan}, 12000);
+      if(r && r.ok) saved = true;
+      else if(r && !r.retry){ toast(r.message || 'Could not save update. Try again.'); return; }
+    }catch(e){ /* weak network — queued below */ }
+    if(!saved){
+      enqueueJob('updatePJP', {userId: session.userId, pjp: newPlan});
+      toast('Weak network — your update is saved and will sync automatically.');
+    }
   }finally{
     setBtnLoading(btn, false);
   }
   session.pjp = newPlan;
-  localStorage.setItem('sfos_session', JSON.stringify(session));
+  lsSet('sfos_session', JSON.stringify(session));
   document.getElementById('pjpContent').innerHTML = formatPJP(newPlan);
   document.getElementById('pjpUpdateBox').style.display = 'none';
   document.getElementById('confirmPjpBtn').style.display = 'block';
@@ -1233,14 +1418,21 @@ async function submitPjpUpdate(){
   toast('Beat plan updated!');
   shareTextToWhatsApp(`*Updated Plan*\n\n${newPlan}`).catch(()=>{});
   pjpPending = false;
-  localStorage.removeItem('sfos_pjp_pending');
+  lsDel('sfos_pjp_pending');
   replaceScreen('screen-dashboard');
   setGreeting();
   updateDashboardButtons();
 }
 
 /* ====================== CAMERA / GEO-STAMP ====================== */
-let lastGeo = null;
+let geoWatchId = null;
+let geoSession = 0;        // changes every time the camera opens or closes, so late results from an earlier session are ignored
+let currentFix = null;     // newest usable GPS fix from THIS camera session only: {lat,lng,accuracy,at}
+let currentPlace = null;   // address for currentFix: {key, area, road, pincode, city, fullAddress, shortAddress}
+let geocodeBusy = false;
+let tilePrefetch = null;   // {key, promise} — satellite tile fetched while the rep lines up the selfie
+let captureRunId = 0;
+const GEO_MAX_ACCURACY_M = 500;
 let stampMapInstance = null;
 let stampClockTimer = null;
 let currentFacingMode = 'user';
@@ -1342,6 +1534,110 @@ async function flipCamera(){
   finally{ if(flipBtn) flipBtn.disabled = false; }
 }
 
+function fixKey(f){ return f.lat.toFixed(3) + ',' + f.lng.toFixed(3); }
+function placeFor(fix){ return (fix && currentPlace && currentPlace.key === fixKey(fix)) ? currentPlace : null; }
+
+/* Location as of right now. Returns null when there is no usable fix in this camera session —
+   it NEVER falls back to the location of an earlier capture. */
+function snapshotGeo(){
+  if(!currentFix || currentFix.accuracy > GEO_MAX_ACCURACY_M) return null;
+  const p = placeFor(currentFix) || {};
+  return {
+    lat: currentFix.lat, lng: currentFix.lng, accuracy: currentFix.accuracy,
+    area: p.area || '', road: p.road || '', pincode: p.pincode || '', city: p.city || '',
+    fullAddress: p.fullAddress || '', shortAddress: p.shortAddress || ''
+  };
+}
+
+function onGeoStatus(err){
+  const h = document.getElementById('stampHeading');
+  const a = document.getElementById('stampAddress');
+  const c = document.getElementById('stampCoords');
+  const loader = document.getElementById('stampLoader');
+  if(!h || !a || !c) return;
+  if(currentFix){
+    const acc = Math.round(currentFix.accuracy);
+    const note = currentFix.accuracy > 50 ? ` ⚠ ±${acc}m` : ` ±${acc}m`;
+    const place = placeFor(currentFix);
+    c.textContent = `Lat ${currentFix.lat.toFixed(6)}°  Long ${currentFix.lng.toFixed(6)}°`;
+    h.textContent = (place && place.shortAddress) ? place.shortAddress + note
+                  : (currentFix.accuracy <= 100 ? 'Location Registered' + note : 'Refining location…' + note);
+    a.textContent = place ? ([place.road, place.pincode].filter(Boolean).join(', ') || 'Street address not available') : 'Looking up address…';
+    if(loader) loader.classList.add('hide');
+    if(!stampMapInstance) renderStampMiniMap(currentFix.lat, currentFix.lng);
+  } else if(err){
+    h.textContent = 'Location unavailable';
+    a.textContent = err.code === 1 ? 'Location permission is off — you can still take the selfie.' : 'Weak signal — you can still take the selfie.';
+    if(loader) loader.classList.add('hide');
+  }
+}
+
+async function maybeResolvePlace(mySession, startedAt){
+  if(geocodeBusy || !currentFix) return;
+  const fix = currentFix, key = fixKey(fix);
+  if(currentPlace && currentPlace.key === key) return;
+  if(!(fix.accuracy <= 100 || Date.now() - startedAt > 6000)) return;
+  geocodeBusy = true;
+  let place = {key, area:'', road:'', pincode:'', city:'', fullAddress:'', shortAddress:''};
+  try{
+    const geoRes = await fetchWithTimeout(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${fix.lat}&lon=${fix.lng}&zoom=16&addressdetails=1&accept-language=en`, {}, 6000);
+    const geoJson = await geoRes.json();
+    const a = geoJson.address || {};
+    place.area = a.suburb || a.neighbourhood || a.quarter || a.village || a.county || '';
+    place.road = a.road || a.pedestrian || a.residential || '';
+    place.pincode = a.postcode || '';
+    place.city = a.city || a.town || a.state_district || a.village || '';
+    place.fullAddress = geoJson.display_name || '';
+    place.shortAddress = [place.area, place.city].filter(Boolean).join(', ');
+  }catch(e){ /* geocoding failed — keep raw coordinates */ }
+  geocodeBusy = false;
+  if(mySession === geoSession){ currentPlace = place; onGeoStatus(); }
+}
+
+function maybePrefetchTile(){
+  if(!currentFix || currentFix.accuracy > 200) return;
+  const key = fixKey(currentFix);
+  if(tilePrefetch && tilePrefetch.key === key) return;
+  tilePrefetch = { key, promise: loadSatelliteTile(currentFix.lat, currentFix.lng, 17) };
+}
+
+function startGeoWatch(){
+  stopGeoWatch();
+  currentFix = null; currentPlace = null; tilePrefetch = null; geocodeBusy = false;
+  const mySession = geoSession;
+  const startedAt = Date.now();
+  if(!navigator.geolocation){ onGeoStatus({code:2}); return; }
+  try{
+    geoWatchId = navigator.geolocation.watchPosition(pos=>{
+      if(mySession !== geoSession) return;
+      const c = pos.coords;
+      const fix = {lat:c.latitude, lng:c.longitude, accuracy:c.accuracy, at:Date.now()};
+      if(!currentFix || fix.accuracy <= currentFix.accuracy * 1.2 || fix.at - currentFix.at > 30000) currentFix = fix;
+      onGeoStatus();
+      maybeResolvePlace(mySession, startedAt);
+      maybePrefetchTile();
+    }, err=>{
+      if(mySession !== geoSession) return;
+      onGeoStatus(err);
+    }, {enableHighAccuracy:true, maximumAge:0, timeout:60000});
+  }catch(e){ onGeoStatus({code:2}); }
+  // Weak signal: don't make the rep wait — tell them they can capture right away.
+  setTimeout(()=>{
+    if(mySession !== geoSession || currentFix) return;
+    const h = document.getElementById('stampHeading'), a = document.getElementById('stampAddress'), loader = document.getElementById('stampLoader');
+    if(h) h.textContent = 'Still locating…';
+    if(a) a.textContent = 'Weak signal — you can take the selfie now without location, or wait a little.';
+    if(loader) loader.classList.add('hide');
+  }, 8000);
+}
+function stopGeoWatch(){
+  geoSession++;
+  if(geoWatchId != null){
+    try{ navigator.geolocation.clearWatch(geoWatchId); }catch(e){}
+    geoWatchId = null;
+  }
+}
+
 async function openCamera(type){
   pendingCaptureType = type;
   showScreen('screen-camera');
@@ -1356,68 +1652,16 @@ async function openCamera(type){
   stampAddress.textContent = 'Waiting for GPS fix…';
   stampCoords.textContent = 'Lat --.------°  Long --.------°';
   startStampClock();
+  startGeoWatch();   // location starts at once, in parallel with the camera
   try{
     await startCameraStream('user');
-  }catch(e){ toast('Camera permission denied.'); stopStampClock(); showScreen('screen-dashboard'); return; }
-
-  try{
-    const pos = await getAccurateLocation(100, 15000, acc=>{
-      stampHeading.textContent = `Refining location… ±${Math.round(acc)}m`;
-    });
-    const {latitude, longitude, accuracy} = pos.coords;
-    stampCoords.textContent = `Lat ${latitude.toFixed(6)}°  Long ${longitude.toFixed(6)}°`;
-    renderStampMiniMap(latitude, longitude);
-    let area = '', road = '', pincode = '', city = '', fullAddress = '';
-    try{
-      const geoRes = await fetchWithTimeout(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=16&addressdetails=1&accept-language=en`, {}, 6000);
-      const geoJson = await geoRes.json();
-      const a = geoJson.address || {};
-      area = a.suburb || a.neighbourhood || a.quarter || a.village || a.county || '';
-      road = a.road || a.pedestrian || a.residential || '';
-      pincode = a.postcode || '';
-      city = a.city || a.town || a.state_district || a.village || '';
-      fullAddress = geoJson.display_name || '';
-    }catch(e){ /* geocoding timed out or failed — proceed with raw coordinates */ }
-    const shortAddress = [area, city].filter(Boolean).join(', ');
-    lastGeo = {lat:latitude, lng:longitude, area, road, pincode, city, accuracy, time:new Date(), fullAddress, shortAddress};
-    const accNote = accuracy > 50 ? ` ⚠ ±${Math.round(accuracy)}m` : ` ±${Math.round(accuracy)}m`;
-    stampHeading.textContent = `${shortAddress || 'Location Registered'}${accNote}`;
-    stampAddress.textContent = [road, pincode].filter(Boolean).join(', ') || 'Street address not available';
-  }catch(err){
-    if(!lastGeo){
-      lastGeo = {lat:0, lng:0, area:'Location unavailable', road:'', pincode:'', city:'', accuracy:999, time:new Date(), fullAddress:'', shortAddress:'Location unavailable'};
-    }
-    stampHeading.textContent = 'Location unavailable';
-    stampAddress.textContent = 'Proceed with selfie — location unavailable.';
-  }
-  stampLoader.classList.add('hide');
+  }catch(e){ toast('Camera permission denied.'); stopStampClock(); stopGeoWatch(); showScreen('screen-dashboard'); return; }
 }
 
-function getAccurateLocation(targetAccuracy, maxWaitMs, onProgress){
-  return new Promise((resolve, reject)=>{
-    let watchId, best = null, done = false;
-    const finish = (pos)=>{
-      if(done) return; done = true;
-      navigator.geolocation.clearWatch(watchId);
-      clearTimeout(timer);
-      pos ? resolve(pos) : reject(new Error('no fix'));
-    };
-    watchId = navigator.geolocation.watchPosition(pos=>{
-      if(!best || pos.coords.accuracy < best.coords.accuracy) best = pos;
-      if(onProgress) onProgress(pos.coords.accuracy);
-      if(pos.coords.accuracy <= targetAccuracy) finish(pos);
-    }, err=>{ if(best) finish(best); else finish(null); },
-    {enableHighAccuracy:true, maximumAge:0, timeout:maxWaitMs});
-    const timer = setTimeout(()=> finish(best), maxWaitMs);
-  });
-}
-
-function goStartDayCamera(){ openCamera('start'); }
-function goVisitSelfieCamera(){ openCamera('visit'); }
-function goEndDayCamera(){ openCamera('end'); }
 function cancelCamera(){
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
   stopStampClock();
+  stopGeoWatch();
   if(stampMapInstance){ stampMapInstance.remove(); stampMapInstance = null; }
   goBack();
 }
@@ -1526,11 +1770,15 @@ function withTimeout(promise, ms, message){
 async function captureSelfie(){
   if(captureInProgress) return;
   captureInProgress = true;
+  const myRun = ++captureRunId;
   const captureBtn = document.getElementById('captureBtn');
   captureBtn.disabled = true;
   try{
-    await withTimeout(doCaptureSelfie(), 25000, 'Capture is taking too long — please try again.');
+    const prepared = await withTimeout(prepareCapture(), 25000, 'Capture is taking too long — please try again.');
+    if(myRun !== captureRunId || !prepared) return;
+    await completeCapture(prepared);
   }catch(e){
+    if(myRun === captureRunId) captureRunId++;   // abandon a slow capture so it can't log or share later
     toast(e && e.message ? e.message : 'Could not save photo. Please try again.');
   }finally{
     captureInProgress = false;
@@ -1538,16 +1786,12 @@ async function captureSelfie(){
   }
 }
 
-async function doCaptureSelfie(){
+/* Draws the stamped photo. Location and time are fixed at the moment of the tap. */
+async function prepareCapture(){
+  const geo = snapshotGeo();          // null when there is no fix — never an earlier capture's location
+  const capturedAt = new Date();
   const video = document.getElementById('camVideo');
   const canvas = document.getElementById('camCanvas');
-  // +300% resolution (4x each dimension, i.e. 16x total pixels) versus
-  // the native video frame. Everything below still computes layout (mapSize,
-  // text rows, etc.) in the ORIGINAL logical width/height via `w`/`h` —
-  // PHOTO_SCALE only maps those same coordinates onto a bigger physical
-  // canvas via ctx.scale(), so geolocation, map-tile fetching, and every
-  // proportion on the stamp panel are completely unaffected; the photo
-  // just comes out sharper.
   const PHOTO_SCALE = 2;
   const logicalW = video.videoWidth || 720;
   const logicalH = video.videoHeight || 960;
@@ -1569,10 +1813,6 @@ async function doCaptureSelfie(){
 
   const w = logicalW, h = logicalH;
 
-  // Size the stamp panel relative to BOTH dimensions of the photo, not just
-  // width — on frames that come back nearly square (varies by device), a
-  // width-only fraction let the panel balloon to a third of the photo with
-  // the map hugely oversized and the text left small and cramped at the top.
   let mapSize = Math.round(Math.min(w*0.24, h*0.22));
   mapSize = Math.max(90, mapSize);
   const pad = Math.max(10, Math.round(mapSize*0.09));
@@ -1582,81 +1822,92 @@ async function doCaptureSelfie(){
   ctx.fillRect(0, h-boxH, w, boxH);
 
   const mapX = pad, mapY = h-boxH+pad;
-  try{
-    if(lastGeo && lastGeo.lat && lastGeo.lng){
-      const mapSource = await loadMapForStamp(lastGeo.lat, lastGeo.lng, mapSize);
-      mapSource.draw(ctx, mapX, mapY);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(mapX, mapY+mapSize-16, mapSize, 16);
-      ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';
-      ctx.fillText(mapSource.attribution, mapX+4, mapY+mapSize-5);
-    } else {
-      drawPinPlaceholder(ctx, mapX, mapY, mapSize);
-    }
-  }catch(e){ drawPinPlaceholder(ctx, mapX, mapY, mapSize); }
+  let sat = null;
+  if(geo){
+    try{
+      const key = currentFix ? fixKey(currentFix) : '';
+      const tile = (tilePrefetch && tilePrefetch.key === key) ? tilePrefetch.promise : loadSatelliteTile(geo.lat, geo.lng, 17);
+      sat = await Promise.race([tile, new Promise(r=>setTimeout(()=>r(null), 2500))]);
+    }catch(e){ sat = null; }
+  }
+  if(sat){
+    ctx.drawImage(sat.bmp, mapX, mapY, mapSize, mapSize);
+    drawPinMarker(ctx, mapX+(sat.px/256)*mapSize, mapY+(sat.py/256)*mapSize);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(mapX, mapY+mapSize-16, mapSize, 16);
+    ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';
+    ctx.fillText('Esri, Earthstar Geographics', mapX+4, mapY+mapSize-5);
+  } else {
+    drawPinPlaceholder(ctx, mapX, mapY, mapSize);
+  }
 
-  // Fill the available height with bigger TEXT rather than bigger gaps
-  // between lines: split the map's height into 4 even rows (heading,
-  // address, coordinates, time) and size each row's font off the row
-  // height itself, so extra vertical space grows the glyphs, not the
-  // whitespace between them. Each row is a single truncated line rather
-  // than wrapped, since a row's height is fixed.
   const textX = mapX + mapSize + pad;
   const textW = w - textX - pad;
   const rowH = mapSize / 4;
-  // Sized up close to the safe ceiling for this row layout: baselines sit
-  // at 0.72*rowH within each row, so ~0.85*rowH is as large as heading
-  // text can go before its ascender would crowd the row above it.
   const APP_FONT = "-apple-system, 'Segoe UI', Roboto, Arial, sans-serif";
   const headingSize = Math.max(26, Math.round(rowH*0.80));
   const bodySize = Math.max(22, Math.round(rowH*0.62));
   const monoSize = Math.max(20, Math.round(rowH*0.58));
 
-  const accNote = lastGeo && Number.isFinite(lastGeo.accuracy) ? ` ±${Math.round(lastGeo.accuracy)}m` : '';
+  const accNote = geo ? ` ±${Math.round(geo.accuracy)}m` : '';
   ctx.fillStyle = '#fff';
   ctx.font = `700 ${headingSize}px ${APP_FONT}`;
-  const heading = (lastGeo && lastGeo.shortAddress) || 'Location Registered';
+  const heading = geo ? (geo.shortAddress || 'Location Registered') : 'Location unavailable';
   ctx.fillText(fitOneLine(ctx, heading + accNote, textW), textX, mapY + rowH*0.72);
 
   ctx.font = `${bodySize}px ${APP_FONT}`;
   ctx.fillStyle = '#e4e9f0';
-  const addressLine = lastGeo ? [lastGeo.road, lastGeo.pincode].filter(Boolean).join(', ') : '';
+  const addressLine = geo ? [geo.road, geo.pincode].filter(Boolean).join(', ') : 'Weak signal — location not captured';
   ctx.fillText(fitOneLine(ctx, addressLine || 'Street address not available', textW), textX, mapY + rowH*1.72);
 
   ctx.font = `${monoSize}px ${APP_FONT}`;
   ctx.fillStyle = '#aab4c4';
-  if(lastGeo && lastGeo.lat && lastGeo.lng){
-    ctx.fillText(fitOneLine(ctx, `Lat ${lastGeo.lat.toFixed(6)}°  Long ${lastGeo.lng.toFixed(6)}°`, textW), textX, mapY + rowH*2.72);
+  if(geo){
+    ctx.fillText(fitOneLine(ctx, `Lat ${geo.lat.toFixed(6)}°  Long ${geo.lng.toFixed(6)}°`, textW), textX, mapY + rowH*2.72);
   }
-
-  const timeStr = lastGeo ? formatStampTime(lastGeo.time) : formatStampTime(new Date());
-  ctx.fillText(fitOneLine(ctx, timeStr, textW), textX, mapY + rowH*3.72);
+  ctx.fillText(fitOneLine(ctx, formatStampTime(capturedAt), textW), textX, mapY + rowH*3.72);
 
   if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
   stopStampClock();
+  stopGeoWatch();
   if(stampMapInstance){ stampMapInstance.remove(); stampMapInstance = null; }
 
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
-  if(!blob){ toast('Could not save photo.'); return; }
+  if(!blob){ toast('Could not save photo.'); return null; }
+  return { blob, geo, capturedAt };
+}
 
+/* Records the point, hands it to the retry queue, shares the photo, and moves on. */
+async function completeCapture(prepared){
+  const { blob, geo, capturedAt } = prepared;
   const point = {
+    id: newId(),
     type: pendingCaptureType,
-    lat: lastGeo?.lat || 0,
-    lng: lastGeo?.lng || 0,
-    accuracy: Number.isFinite(lastGeo?.accuracy) ? lastGeo.accuracy : 999,
-    address: lastGeo?.fullAddress || lastGeo?.area || 'Location unknown',
-    shortAddress: lastGeo?.shortAddress || lastGeo?.area || '',
-    time: (lastGeo?.time || new Date()).toISOString()
+    lat: geo ? geo.lat : null,
+    lng: geo ? geo.lng : null,
+    accuracy: geo ? geo.accuracy : null,
+    address: geo ? (geo.fullAddress || geo.area || '') : 'Location unavailable (weak signal)',
+    shortAddress: geo ? (geo.shortAddress || geo.area || '') : '',
+    time: capturedAt.toISOString()
   };
+  let endJob = null;
   if(KM_TRACKED_TYPES.includes(pendingCaptureType)){
     todayLog.push(point);
-    localStorage.setItem('sfos_today_log', JSON.stringify(todayLog));
-    api('logPoint', {userId: session.userId, date: todayStr(), ...point}).catch(()=>{});
+    saveDayState();
+    enqueueJob('logPoint', {
+      userId: session.userId, id: point.id, type: point.type,
+      lat: point.lat, lng: point.lng, accuracy: point.accuracy, address: point.address,
+      capturedAt: point.time,
+      date: istDateStr(capturedAt), time: point.time    // kept so an older backend version still works
+    });
+    if(pendingCaptureType === 'end'){
+      endJob = enqueueJob('endDay', { userId: session.userId, capturedAt: point.time });
+    }
   }
 
   const captionText = pendingCaptureType === 'visitform' ? VisitForm.getCaption() : '';
   try{ await shareToWhatsApp(blob, 'selfie.jpg', captionText); }
-  catch(e){ /* sharing is best-effort — never block finishing the capture flow */ }
+  catch(e){ /* best-effort */ }
 
   if(pendingCaptureType === 'start'){
     dayStarted = true;
@@ -1666,23 +1917,15 @@ async function doCaptureSelfie(){
   } else if(pendingCaptureType === 'selfie'){
     replaceScreen('screen-dashboard');
   } else if(pendingCaptureType === 'visitform'){
-    // Location selfie captured at the end of the visit-report wizard —
-    // return to the wizard and let it finish validating/submitting.
     replaceScreen('screen-visitreport');
-    VisitForm.finishSubmit();
+    VisitForm.afterSelfie();
   } else if(pendingCaptureType === 'end'){
-    await buildDayEndTimeline();
+    await buildDayEndTimeline(endJob);
   } else {
     replaceScreen('screen-dashboard');
   }
 }
 
-/* Writes a blob into the app's private cache dir and hands it to the
-   native Android share sheet via @capacitor/share. This replaces the old
-   window.open('https://wa.me/...') fallback, which Capacitor's WebView
-   can't reliably open as a new window/tab — that's the "couldn't open
-   this chat link" issue. The native share sheet works for WhatsApp or
-   any other installed app and never depends on window.open(). */
 async function shareFileNative(blob, fileName, caption){
   const { Filesystem, Directory, Share } = window.Capacitor.Plugins;
   const dataUrl = await new Promise((resolve, reject)=>{
@@ -1702,6 +1945,26 @@ async function shareFileNative(blob, fileName, caption){
   await Share.share(opts);
 }
 
+function isShareAbort(e){ return !!e && (e.name === 'AbortError' || /abort|cancel/i.test(e.message || '')); }
+
+/* Some browsers want a fresh tap before they will open the share sheet. */
+function askShareTap(label){
+  return new Promise(resolve=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'sharePrompt';
+    wrap.innerHTML = `<div class="card"><div class="sharePromptTitle">${esc(label)}</div>` +
+      `<button class="btn primary" type="button" data-act="go">Share on WhatsApp</button>` +
+      `<button class="btn" type="button" data-act="skip">Skip</button></div>`;
+    document.body.appendChild(wrap);
+    wrap.addEventListener('click', e=>{
+      const act = e.target && e.target.getAttribute && e.target.getAttribute('data-act');
+      if(!act) return;
+      wrap.remove();
+      resolve(act === 'go');
+    });
+  });
+}
+
 async function shareToWhatsApp(blob, fileName='selfie.jpg', caption=''){
   const mimeType = blob.type || 'image/jpeg';
   const Plugins = window.Capacitor && window.Capacitor.Plugins;
@@ -1711,30 +1974,34 @@ async function shareToWhatsApp(blob, fileName='selfie.jpg', caption=''){
     try{
       await shareFileNative(blob, fileName, caption);
     }catch(e){
-      // The user closing the native share sheet without picking an app
-      // also rejects this promise — that's not a real failure, so only
-      // toast for anything that doesn't look like a cancel.
       if(!(e && /cancel/i.test(e.message||''))) toast('Could not open the share sheet.');
     }finally{
       setTimeout(()=>{ nativeShareCooldown = false; }, 1500);
     }
     return;
   }
-  // Not running inside the Android app (plain browser / installed PWA) —
-  // fall back to the Web Share API, then a manual download.
+  let file = null, data = null;
   try{
-    const file = new File([blob], fileName, {type:mimeType});
-    const shareData = caption ? {files:[file], text:caption} : {files:[file]};
-    if(navigator.canShare && navigator.canShare(shareData)){
-      await navigator.share(shareData);
-      return;
-    }
+    file = new File([blob], fileName, {type:mimeType});
+    data = caption ? {files:[file], text:caption} : {files:[file]};
   }catch(e){}
+  if(data && navigator.canShare && navigator.canShare(data)){
+    try{ await navigator.share(data); return; }
+    catch(e){
+      if(isShareAbort(e)) return;                       // rep closed the share sheet — nothing more to do
+      if(e && e.name === 'NotAllowedError'){            // browser wants a fresh tap
+        const go = await askShareTap('Share your selfie on WhatsApp');
+        if(!go) return;
+        try{ await navigator.share(data); return; }
+        catch(e2){ if(isShareAbort(e2)) return; }
+      }
+    }
+  }
+  // Sharing files isn't available here: save the photo and open WhatsApp.
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
-  toast('Photo saved. Choose it in WhatsApp to attach.');
-  const waUrl = CONFIG.WHATSAPP_GROUP_INVITE || "https://chat.whatsapp.com/E4R9B2fVwKW2xzJT7gCopd";
-  window.open(waUrl, '_blank');
+  toast('Photo saved. Attach it in WhatsApp.');
+  window.open('https://wa.me/?text=' + encodeURIComponent(caption || ''), '_blank');
 }
 
 async function shareTextToWhatsApp(text){
@@ -1751,14 +2018,11 @@ async function shareTextToWhatsApp(text){
     }
     return;
   }
-  try{
-    if(navigator.share){
-      await navigator.share({text});
-      return;
-    }
-  }catch(e){}
-  const waUrl = 'https://wa.me/?text=' + encodeURIComponent(text);
-  window.open(waUrl, '_blank');
+  if(navigator.share){
+    try{ await navigator.share({text}); return; }
+    catch(e){ if(isShareAbort(e)) return; }
+  }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
 }
 
 /* ====================== DASHBOARD ====================== */
@@ -1771,7 +2035,7 @@ function setGreeting(){
   const btn = hero.querySelector('.heroCameraBtn');
   hero.innerHTML = `
     <div class="heroGreeting">${g},</div>
-    <div class="heroName">${session.userName}</div>
+    <div class="heroName">${esc(session.userName)}</div>
     <div class="heroDivider"></div>
     <div class="heroPjpLabel">Today's Beat Plan</div>
     ${formatPJP(session.pjp)}
@@ -2071,7 +2335,8 @@ const VisitForm = (function(){
   let currentPage = "p1";
   let history = [];
   let answers = {};
-  let awaitingCapture = false; // true while the location selfie is being captured mid-submit
+  let awaitingCapture = false;   // true while the camera step of a submission is open
+  let reportSubmitted = false;   // true once this visit's report has been handed to the retry queue
   let autoDB = null; // set in reset() when the logged-in user has exactly one tagged DB
 
   let card, btnBack, btnNext, btnClear, navBar;
@@ -2118,13 +2383,13 @@ const VisitForm = (function(){
     }
     else if(q.type === 'textarea'){
       const val = answers[qid] || '';
-      inner = `<textarea id="vfInput_${qid}" data-qid="${qid}" placeholder="${vfEsc(q.placeholder || 'Type your answer')}">${vfEsc(val)}</textarea>`;
+      inner = cxWrap(qid, q, `<textarea id="vfInput_${qid}" data-qid="${qid}" placeholder="${vfEsc(q.placeholder || 'Type your answer')}">${vfEsc(val)}</textarea>`, true);
     }
     else {
       const val = answers[qid] || '';
       const inputmode = (q.type === 'number' || q.type === 'tel') ? 'numeric' : 'text';
       const maxlen = q.maxLen ? ` maxlength="${q.maxLen}"` : '';
-      inner = `<input type="text" id="vfInput_${qid}" data-qid="${qid}" inputmode="${inputmode}"${maxlen} placeholder="Type your answer" value="${vfEsc(val)}">`;
+      inner = cxWrap(qid, q, `<input type="text" id="vfInput_${qid}" data-qid="${qid}" inputmode="${inputmode}"${maxlen} placeholder="Type your answer" value="${vfEsc(val)}">`, false);
     }
     return `<div class="vfFieldWrap" id="vfFieldWrap_${qid}">${inner}<p class="vfErrorMsg" id="vfErrorMsg_${qid}"></p></div>`;
   }
@@ -2279,6 +2544,14 @@ const VisitForm = (function(){
       const qid = Number(inp.dataset.qid);
       if(AUTOFILL_RULES[qid]) inp.addEventListener('blur', ()=> handleAutofillBlur(qid));
     });
+    card.querySelectorAll('input[data-qid], textarea[data-qid]').forEach(inp=>{
+      if(inp.type === 'radio' || inp.type === 'checkbox' || inp.dataset.cxWired) return;
+      const qid = Number(inp.dataset.qid);
+      if(!Q[qid] || !Q[qid].rx) return;
+      inp.dataset.cxWired = '1';
+      inp.addEventListener('input', ()=> updateCounter(qid));
+      updateCounter(qid, true);
+    });
   }
 
   /* Autofill: typing a known lookup value into one of these fields and
@@ -2338,8 +2611,90 @@ const VisitForm = (function(){
       if(val === undefined || val === null || val === ''){ console.log(`[autofill] Q${targetQid}: matched row's "${realCol}" is blank`); return; }
       targetEl.value = val;
       answers[targetQid] = String(val).trim();
+      updateCounter(Number(targetQid));
       console.log(`[autofill] Q${targetQid} filled from "${realCol}":`, val);
     });
+  }
+
+  /* ---- Live character counter ----
+   * The counter is driven by the SAME regular expression the field is validated with (q.rx), so it can
+   * never disagree with the Next button's check. rxBounds() reads the shortest and longest length the
+   * pattern accepts straight from the regex text, so changing a pattern in RX changes the counter too. */
+  const _rxBoundsCache = new Map();
+  function rxBounds(rx){
+    if(!rx) return null;
+    if(_rxBoundsCache.has(rx)) return _rxBoundsCache.get(rx);
+    let src = rx.source.replace(/^\^/, '').replace(/\$$/, '').replace(/\(\?[!=][^)]*\)/g, '');   // drop ^ $ and look-aheads like (?!.*\s)
+    let min = 0, max = 0, i = 0, ok = true;
+    while(i < src.length){
+      const c = src[i];
+      let end;
+      if(c === '['){
+        let j = i + 1;
+        while(j < src.length && src[j] !== ']'){ if(src[j] === '\\') j++; j++; }
+        end = j + 1;
+      } else if(c === '\\'){ end = i + 2; }
+      else if(c === '(' || c === ')' || c === '|'){ ok = false; break; }
+      else { end = i + 1; }
+      let qmin = 1, qmax = 1, k = end;
+      const m = src.slice(k).match(/^\{(\d+)(?:,(\d*))?\}/);
+      if(m){ qmin = +m[1]; qmax = (m[2] === undefined) ? qmin : (m[2] === '' ? Infinity : +m[2]); k += m[0].length; }
+      else if(src[k] === '?'){ qmin = 0; qmax = 1; k++; }
+      else if(src[k] === '*'){ qmin = 0; qmax = Infinity; k++; }
+      else if(src[k] === '+'){ qmin = 1; qmax = Infinity; k++; }
+      min += qmin; max += qmax; i = k;
+    }
+    const out = ok ? {min, max} : null;
+    _rxBoundsCache.set(rx, out);
+    return out;
+  }
+
+  function cxWrap(qid, q, fieldMarkup, isArea){
+    if(!q.rx) return fieldMarkup;
+    return `<div class="vfInputBox${isArea ? ' isArea' : ''}">${fieldMarkup}` +
+      `<span class="vfCounter" id="vfCounter_${qid}"></span>` +
+      `<span class="vfTick" id="vfTick_${qid}" aria-hidden="true"><svg viewBox="0 0 24 24"><circle class="vfTickRing" cx="12" cy="12" r="10"/><path class="vfTickCheck" d="M7 12.5l3.2 3.2L17 8.8"/></svg></span></div>`;
+  }
+
+  /* untouched: nothing shown | short or wrong: red glow + counter | matches the pattern: counter hidden,
+     normal border, green tick draws itself */
+  function updateCounter(qid, initial){
+    const q = Q[qid];
+    if(!q || !q.rx) return;
+    const el = document.getElementById(`vfInput_${qid}`);
+    const wrap = document.getElementById(`vfFieldWrap_${qid}`);
+    const counter = document.getElementById(`vfCounter_${qid}`);
+    const tick = document.getElementById(`vfTick_${qid}`);
+    if(!el || !wrap || !counter || !tick) return;
+    const raw = el.value || '';
+    const b = rxBounds(q.rx) || {min:1, max: q.maxLen || Infinity};
+    const len = raw.length;
+    const empty = raw.trim() === '';
+    const wasOk = wrap.classList.contains('cx-ok');
+
+    if(empty && (initial || !q.required)){            // nothing typed yet (or an optional field left blank)
+      wrap.classList.remove('cx-bad', 'cx-ok');
+      counter.textContent = '';
+      tick.classList.remove('draw', 'still');
+      return;
+    }
+    if(!empty && q.rx.test(raw)){                      // pattern met
+      wrap.classList.remove('cx-bad', 'invalid');
+      wrap.classList.add('cx-ok');
+      counter.textContent = '';
+      if(!wasOk){
+        tick.classList.remove('draw', 'still');
+        if(initial){ tick.classList.add('still'); }    // value already valid when the page shows: tick without replaying the drawing
+        else { void tick.getBoundingClientRect(); tick.classList.add('draw'); }
+      }
+      return;
+    }
+    wrap.classList.remove('cx-ok');
+    wrap.classList.add('cx-bad');
+    tick.classList.remove('draw', 'still');
+    if(len < b.min) counter.textContent = (b.min - len) + ' more';
+    else if(len > b.max) counter.textContent = (len - b.max) + ' over';
+    else counter.textContent = 'Check format';
   }
 
   function vfSetInvalid(qid, msg){
@@ -2443,12 +2798,7 @@ const VisitForm = (function(){
       // below also appends currentPage itself, so pushing it here as well
       // made the final page's question ids (and answers) appear twice in
       // the submitted payload and the on-screen summary.
-      lockActiveBlock();
-      navBar.style.display = 'none';
-      // Capture a location selfie (shared to WhatsApp, same as other app
-      // selfies) before the report is actually submitted.
-      awaitingCapture = true;
-      openCamera('visitform');
+      submitReportThenCamera();
       return;
     }
     history.push(currentPage);
@@ -2476,18 +2826,13 @@ const VisitForm = (function(){
 
   function reset(){
     if(awaitingCapture){
-      // We're returning from the location-selfie capture that's part of
-      // finishing a submission — the form's answers, history and rendered
-      // sections must survive this screen transition, so skip a real reset.
-      // If the capture succeeded, finishSubmit() (called right after this)
-      // takes over immediately. If the user cancelled the camera instead,
-      // this restores the UI so they can pick up where they left off.
+      // Coming back from the camera: the report is already submitted, so keep the result on screen.
       awaitingCapture = false;
-      navBar.style.display = 'flex';
-      unlockLastBlock();
-      btnNext.textContent = (currentPage === 'pFinal') ? 'Review & Submit' : 'Next';
+      const sb = document.getElementById('vfSelfieBtn');
+      if(sb) sb.style.display = 'block';
       return;
     }
+    reportSubmitted = false;
     answers = {};
     history = [];
     currentPage = 'p1';
@@ -2544,9 +2889,7 @@ const VisitForm = (function(){
     return ids;
   }
 
-  async function finishSubmit(){
-    navBar.style.display = 'none';
-
+  function buildReport(){
     const pathIds = getPathQuestionIds();
     const pathAnswers = {};
     const lines = [];
@@ -2568,11 +2911,27 @@ const VisitForm = (function(){
       }
       lines.push(`${String(id).padStart(2,'0')}. ${q.label}\n    -> ${display}`);
     });
+    return { pathAnswers, lines };
+  }
 
-    // Remove the earlier (now-locked) wizard pages so only the final
-    // summary + "Back to Dashboard" button remain on screen.
+  function setDoneStatus(title, msg){
+    const t = document.getElementById('vfDoneTitle'), m = document.getElementById('vfDoneMsg');
+    if(t) t.textContent = title;
+    if(m) m.textContent = msg;
+  }
+  function showReportStatus(st){
+    if(st === 'sent') setDoneStatus('Visit report submitted', 'Saved to the tracker sheet.');
+    else if(st === 'queued') setDoneStatus('Saved on this phone', 'Weak network — your report will be sent automatically. You can keep working.');
+    else if(st === 'failed') setDoneStatus('Report could not be delivered', 'Please inform your admin and share the details below.');
+  }
+
+  /* Submit the report first (it can never be lost to the camera or WhatsApp step), then open the camera. */
+  async function submitReportThenCamera(){
+    navBar.style.display = 'none';
+    const { pathAnswers, lines } = buildReport();
+    reportSubmitted = true;
+
     card.innerHTML = '';
-
     const doneBlock = document.createElement('div');
     doneBlock.className = 'vfSection active';
     doneBlock.innerHTML = `
@@ -2581,50 +2940,37 @@ const VisitForm = (function(){
         <h2 id="vfDoneTitle">Submitting…</h2>
         <p id="vfDoneMsg">Sending your responses to the tracker sheet…</p>
         <div class="vfSummary">${lines.length ? vfEsc(lines.join('\n\n')) : '(Distributor Meet — no further details required.)'}</div>
+        <button class="btn primary" type="button" id="vfSelfieBtn" style="display:none" onclick="VisitForm.retakeSelfie()">Take location selfie</button>
         <button class="btn primary" type="button" onclick="showScreen('screen-dashboard')">Back to Dashboard</button>
       </div>
     `;
     card.appendChild(doneBlock);
     doneBlock.scrollIntoView({behavior:'smooth', block:'start'});
 
-    // Routed directly to the Daily Visit MIS Apps Script (VISIT_REPORT_SUBMIT_URL),
-    // matching the { answers: {...} } shape its doPost() actually parses.
-    // We attempt a normal (cors-mode) fetch so we can read back a real
-    // status instead of guessing — Apps Script Web Apps sometimes can't be
-    // read this way due to how script.google.com redirects to
-    // script.googleusercontent.com, in which case the request still reaches
-    // doPost and the row still gets appended server-side; we just can't
-    // confirm it from here, so that case gets an honest "unconfirmed"
-    // message rather than a false "success" or false "failure".
-    const titleEl = document.getElementById('vfDoneTitle');
-    const msgEl = document.getElementById('vfDoneMsg');
     const submitUrl = CONFIG.VISIT_REPORT_SUBMIT_URL;
     if(!submitUrl || submitUrl.startsWith('PASTE_')){
-      titleEl.textContent = 'Not submitted';
-      msgEl.textContent = 'VISIT_REPORT_SUBMIT_URL is not configured.';
+      setDoneStatus('Not submitted', 'VISIT_REPORT_SUBMIT_URL is not configured.');
       return;
     }
-    try{
-      const res = await fetch(submitUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ answers: pathAnswers })
-      });
-      const data = await res.json();
-      if(data && data.status === 'ok'){
-        titleEl.textContent = 'Visit report submitted';
-        msgEl.textContent = 'Your responses were saved to the tracker sheet.';
-      } else {
-        titleEl.textContent = 'Submission failed';
-        msgEl.textContent = (data && data.message) || 'The server reported an error saving your responses.';
-      }
-    }catch(e){
-      // Could not read the response (often a CORS/redirect quirk with Apps
-      // Script, not necessarily a real failure) — the row may still have
-      // been written. Say so plainly rather than claiming success.
-      titleEl.textContent = 'Submitted — could not confirm';
-      msgEl.textContent = 'Your responses were sent, but we could not confirm the server received them. Please check the tracker sheet.';
-    }
+    const job = enqueueJob('visitReport', { answers: pathAnswers });
+    watchJob(job, showReportStatus);
+    const st = await waitForJob(job, 12000);     // short wait; a slow network never blocks the rep
+    showReportStatus(st === 'timeout' ? 'queued' : st);
+    if(st === 'sent') await new Promise(r=>setTimeout(r, 700));
+    awaitingCapture = true;
+    openCamera('visitform');
+  }
+
+  function retakeSelfie(){
+    const sb = document.getElementById('vfSelfieBtn');
+    if(sb) sb.style.display = 'none';
+    awaitingCapture = true;
+    openCamera('visitform');
+  }
+
+  function afterSelfie(){
+    const sb = document.getElementById('vfSelfieBtn');
+    if(sb) sb.style.display = 'none';
   }
 
   function captionAnswerText(qid){
@@ -2690,13 +3036,13 @@ const VisitForm = (function(){
     return lines.join('\n');
   }
 
-  return { reset: reset, finishSubmit: finishSubmit, getCaption: getCaption };
+  return { reset: reset, afterSelfie: afterSelfie, retakeSelfie: retakeSelfie, getCaption: getCaption, rxBounds: rxBounds, RX: RX };
 })();
 
 /* ====================== MASTER SEARCH ====================== */
 function rowsToTable(headers, rows){
-  const thead = '<tr>' + headers.map(h=>`<th>${h}</th>`).join('') + '</tr>';
-  const tbody = rows.map(row => '<tr>' + row.map(c=>`<td>${c.value ?? '-'}</td>`).join('') + '</tr>').join('');
+  const thead = '<tr>' + headers.map(h=>`<th>${esc(h)}</th>`).join('') + '</tr>';
+  const tbody = rows.map(row => '<tr>' + row.map(c=>`<td>${c.value == null || c.value === '' ? '-' : esc(c.value)}</td>`).join('') + '</tr>').join('');
   return `<div class="card" style="overflow-x:auto"><table>${thead}${tbody}</table></div>`;
 }
 async function doMasterSearch(){
@@ -2740,7 +3086,7 @@ async function openSummary(){
     if(!r.ok || !r.rows || r.rows.length===0){ el.innerHTML = 'No summary available yet.'; return; }
     el.innerHTML = r.rows.map(pairs => `
       <table style="margin-bottom:10px">
-        ${pairs.map(p=>`<tr><th style="width:45%">${p.label}</th><td>${p.value}</td></tr>`).join('')}
+        ${pairs.map(p=>`<tr><th style="width:45%">${esc(p.label)}</th><td>${esc(p.value)}</td></tr>`).join('')}
       </table>`).join('');
     lastSummaryData = r.rows;
     shareBtn.style.display = 'block';
@@ -2859,17 +3205,6 @@ function haversineKm(a,b){
   const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
 }
-async function routeDistanceKm(a, b){
-  // OSRM's free public routing server returns the actual road-network
-  // driving distance between two points (not a straight line).
-  const url = `https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=false`;
-  const res = await fetchWithTimeout(url, {}, 7000);
-  if(!res.ok) throw new Error('routing failed');
-  const data = await res.json();
-  const meters = data?.routes?.[0]?.distance;
-  if(!Number.isFinite(meters)) throw new Error('no route');
-  return meters / 1000;
-}
 function computeHoursWorked(sorted){
   const startPt = sorted.find(p=>p.type==='start');
   const endPt = [...sorted].reverse().find(p=>p.type==='end');
@@ -2882,7 +3217,21 @@ function formatHoursWorked(hours){
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m}m`;
 }
-async function buildDayEndTimeline(skipSave){
+function applyEndDayResult(r){
+  if(!r) return;
+  const km = Number(r.totalKm);
+  if(Number.isFinite(km)){
+    document.getElementById('kmTotalText').textContent = km.toFixed(1) + ' km';
+    document.getElementById('kmTotalNote').textContent = r.estimatedLegs > 0
+      ? 'Road distance (estimated for some legs).'
+      : 'Road distance between capture points.';
+  }
+  const hrs = Number(r.hoursWorked);
+  if(Number.isFinite(hrs) && hrs > 0) document.getElementById('daySummaryHours').textContent = formatHoursWorked(hrs);
+  const vis = Number(r.visits);
+  if(Number.isFinite(vis)) document.getElementById('daySummaryVisits').textContent = vis;
+}
+async function buildDayEndTimeline(job){
   const sorted = [...todayLog].sort((a,b)=> new Date(a.time)-new Date(b.time));
   document.getElementById('timelineList').innerHTML = sorted.map(p=>`
     <div class="timelineItem">
@@ -2890,47 +3239,35 @@ async function buildDayEndTimeline(skipSave){
       <span class="muted">${new Date(p.time).toLocaleTimeString()}</span>
     </div>`).join('');
 
+  // Shown straight away from this phone; replaced by the server's figures as soon as they arrive.
   const visitsToday = sorted.filter(p=>VISIT_COUNT_TYPES.includes(p.type)).length;
-  const hoursWorked = computeHoursWorked(sorted);
   document.getElementById('daySummaryVisits').textContent = visitsToday;
-  document.getElementById('daySummaryHours').textContent = formatHoursWorked(hoursWorked);
+  document.getElementById('daySummaryHours').textContent = formatHoursWorked(computeHoursWorked(sorted));
 
   const kmTotalText = document.getElementById('kmTotalText');
   const kmTotalNote = document.getElementById('kmTotalNote');
   kmTotalText.textContent = 'Calculating…';
-  kmTotalNote.textContent = 'Working out road distance via routing…';
+  kmTotalNote.textContent = 'Working out the distance on the server…';
 
   dayEnded = true;
   updateDashboardButtons();
   replaceScreen('screen-dayend');
 
-  let totalKm = 0;
-  let usedFallback = false;
-  for(let i=1;i<sorted.length;i++){
-    const a = sorted[i-1], b = sorted[i];
-    if(!a.lat || !a.lng || !b.lat || !b.lng) continue;
-    try{
-      totalKm += await routeDistanceKm(a, b);
-    }catch(e){
-      // Routing service unreachable/slow for this leg — fall back to a
-      // straight-line estimate for just that leg rather than failing entirely.
-      totalKm += haversineKm(a, b);
-      usedFallback = true;
-    }
+  if(!job){   // screen restored after a reload — make sure the summary is on the server and show it
+    const endPt = [...sorted].reverse().find(p=>p.type==='end');
+    job = outbox.find(j=>j.kind==='endDay' && j.payload && j.payload.userId===session.userId)
+       || (endPt ? enqueueJob('endDay', {userId: session.userId, capturedAt: endPt.time}) : null);
   }
-  kmTotalText.textContent = totalKm.toFixed(1) + ' km';
-  kmTotalNote.textContent = usedFallback
-    ? 'Road distance via routing (straight-line estimate used for some legs).'
-    : 'Road distance between capture points via routing.';
-  if(skipSave) return; // restoring after a reload: summary was already saved
-  api('saveDaySummary', {
-    userId: session.userId,
-    date: todayStr(),
-    totalKm: totalKm.toFixed(2),
-    hoursWorked: hoursWorked.toFixed(2),
-    visits: visitsToday,
-    points: sorted
-  }).catch(()=>{});
+  if(!job) return;
+  watchJob(job, (st, res)=>{
+    if(st === 'sent') applyEndDayResult(res);
+    else if(st === 'queued' || st === 'failed'){
+      kmTotalText.textContent = 'Pending';
+      kmTotalNote.textContent = st === 'failed'
+        ? 'Distance could not be calculated. Please inform your admin.'
+        : 'Saved — the distance is calculated automatically once your network is back.';
+    }
+  });
 }
 function labelFor(t){ return t==='start'?'Start of Day': t==='end'?'End of Day':'Visit Selfie'; }
 function goToDashboardAfterDayEnd(){
@@ -2938,11 +3275,23 @@ function goToDashboardAfterDayEnd(){
   setGreeting();
   updateDashboardButtons();
 }
+/* Today's points are kept per user and per day, so a logout (admin force logout, midnight, or the rep)
+   never wipes the day — logging back in the same day carries on where it left off. */
+const DAY_KEY = 'sfos_day';
+function loadDayState(){
+  todayLog = []; dayStarted = false; dayEnded = false;
+  const d = lsJson(DAY_KEY, null);
+  if(d && session && d.userId === session.userId && d.date === todayStr() && Array.isArray(d.points)) todayLog = d.points;
+  if(todayLog.some(p=>p.type==='start')) dayStarted = true;
+  if(todayLog.some(p=>p.type==='end')) dayEnded = true;
+}
+function saveDayState(){
+  if(session) lsSet(DAY_KEY, JSON.stringify({userId: session.userId, date: todayStr(), points: todayLog}));
+}
 function finishLogout(){
-  localStorage.removeItem('sfos_session');
-  localStorage.removeItem('sfos_today_log');
-  localStorage.removeItem('sfos_screen');
-  localStorage.removeItem('sfos_pjp_pending');
+  lsDel('sfos_session');
+  lsDel('sfos_screen');
+  lsDel('sfos_pjp_pending');
   session = null; todayLog = []; dayStarted = false; dayEnded = false; pjpPending = false;
   document.getElementById('loginPin').value='';
   replaceScreen('screen-login', 'back');
@@ -2952,8 +3301,11 @@ function finishLogout(){
  * Checked only when the app opens or returns to the foreground — no timer
  * polling. A failed/offline check NEVER logs the user out. */
 let _forceLogoutBusy = false;
-async function checkForceLogout(){
+let _lastForceCheck = 0;
+async function checkForceLogout(force){
   if(!session || _forceLogoutBusy) return;
+  if(!force && Date.now() - _lastForceCheck < 10 * 60 * 1000) return;   // at most once every 10 minutes
+  _lastForceCheck = Date.now();
   _forceLogoutBusy = true;
   try{
     const r = await api('checkSession', {userId: session.userId});
@@ -2965,31 +3317,33 @@ async function checkForceLogout(){
   finally{ _forceLogoutBusy = false; }
 }
 document.addEventListener('visibilitychange', ()=>{
-  if(document.visibilityState === 'visible') checkForceLogout();
+  if(document.visibilityState !== 'visible') return;
+  if(session && session.date !== todayStr()){          // phone slept through midnight (IST)
+    toast("It's a new day — please log in again.");
+    finishLogout();
+    return;
+  }
+  checkForceLogout();
+  flushOutbox();
 });
 
 /* ====================== MIDNIGHT AUTO-LOGOUT ====================== */
 function scheduleMidnightLogout(){
-  const now = new Date();
-  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 0, 5, 0);
-  const ms = nextMidnight - now;
   setTimeout(()=>{
     if(session){
       toast("It's midnight — logging you out for the day.");
       finishLogout();
     }
     scheduleMidnightLogout();
-  }, ms);
+  }, msUntilISTMidnight());
 }
 scheduleMidnightLogout();
-
-function todayStr(){ return new Date().toISOString().slice(0,10); }
 
 /* Resume session */
 function restoreScreenAfterReload(){
   // Read before any renderScreen() call, since rendering overwrites it.
-  const saved = localStorage.getItem('sfos_screen');
-  pjpPending = localStorage.getItem('sfos_pjp_pending') === '1';
+  const saved = lsGet('sfos_screen');
+  pjpPending = lsGet('sfos_pjp_pending') === '1';
 
   suppressHistoryPush = true; // no gesture yet after a reload: don't add history entries
   try{
@@ -3002,7 +3356,7 @@ function restoreScreenAfterReload(){
       return;
     }
     if(saved === 'screen-dayend' && dayEnded){
-      buildDayEndTimeline(true);
+      buildDayEndTimeline(null);
       return;
     }
     replaceScreen('screen-dashboard'); // sets historyRepair = 'home'
@@ -3017,17 +3371,24 @@ function restoreScreenAfterReload(){
     suppressHistoryPush = false;
   }
 }
+/* One-time move from the old single-day log format to the per-user day state. */
+(function migrateDayLog(){
+  const legacy = lsJson('sfos_today_log', null);
+  if(Array.isArray(legacy) && session && !lsGet(DAY_KEY)){
+    lsSet(DAY_KEY, JSON.stringify({userId: session.userId, date: session.date, points: legacy}));
+  }
+  lsDel('sfos_today_log');
+})();
+renderSyncBadge();
+flushOutbox();
 if(session && session.date === todayStr()){
+  loadDayState();
   setGreeting();
-  const log = JSON.parse(localStorage.getItem('sfos_today_log') || '[]');
-  if(log.some(p=>p.type==='start')) dayStarted = true;
-  if(log.some(p=>p.type==='end')) dayEnded = true;
   updateDashboardButtons();
   restoreScreenAfterReload();
-  checkForceLogout();
+  checkForceLogout(true);
 } else if(session && session.date !== todayStr()){
-  // Session left over from a previous day (app was closed before the
-  // midnight auto-logout could run) — clear it so PIN is required again.
+  // Session left over from a previous day — clear it so the PIN is required again.
   finishLogout();
 }
 </script>
