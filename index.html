@@ -2177,7 +2177,6 @@ const VisitForm = (function(){
     ltr:    /^[0-9]{1,4}$/,
     other:  /^[\s\S]{1,100}$/,
     para:   /^[\s\S]{1,300}$/
-    scan:   /^[A-Za-z0-9=]{1,9}$/
   };
 
   const DISTRIBUTORS = [
@@ -2189,7 +2188,7 @@ const VisitForm = (function(){
     "Rajdeep Automotives",
     "SHREE KRISHNA AGENCIES",
     "SRI SAINATH AGENCIES",
-    "Sukan Incorporation(Surat)"
+    "Sukan Incorporation"
   ];
   const SEGMENTS = ["MCO","CVO","PCO","LCV","AGRI"];
 
@@ -2207,7 +2206,7 @@ const VisitForm = (function(){
     "D74545": ["MANISHA ENTERPRISES"],
     "D69561": ["MUKTI TRADERS", "SHREE KRISHNA AGENCIES"],
     "D73116": ["Rajdeep Automotives", "SRI SAINATH AGENCIES"],
-    "D97501": ["Sukan Incorporation(Surat)"]
+    "D97501": ["Sukan Incorporation"]
   };
 
   const Q = {
@@ -2222,7 +2221,7 @@ const VisitForm = (function(){
         ]},
 
     3:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter valid outlet name (2-100 characters)." },
-    4:{ type:"tel", label:"Mobile Number", required:true, rx:RX.mobile, maxLen:10, err:"Enter valid 10-digit mobile number." },
+    4:{ type:"tel", label:"Mobile Number", required:true, rx:RX.mobile, maxLen:10, err:"Enter a valid 10-digit mobile number." },
     5:{ type:"checkbox", label:"Segment", required:true, options:SEGMENTS.map(o=>({label:o,value:o})) },
     6:{ type:"number", label:"Monthly Potential ( In Ltr )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
     7:{ type:"radio", label:"Outcome of the Visit", required:true,
@@ -2246,14 +2245,14 @@ const VisitForm = (function(){
          ]},
 
     15:{ type:"text", label:"Share ID", required:true, rx:RX.share, maxLen:10, err:"Enter a valid Share ID (8-10 letters/numbers)." },
-    16:{ type:"tel", label:"Linked Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
+    16:{ type:"text", label:"Linked Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
     17:{ type:"text", label:"Linked Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name." },
 
     18:{ type:"text", label:"Share ID", required:true, rx:RX.share, maxLen:10, err:"Enter a valid Share ID (8-10 letters/numbers)." },
     19:{ type:"tel", label:"Registered Mobile Number", required:true, rx:RX.mobile, maxLen:10, err:"Enter a valid 10-digit mobile number." },
     20:{ type:"checkbox", label:"Segment", required:true, options:SEGMENTS.map(o=>({label:o,value:o})) },
     21:{ type:"number", label:"Monthly Potential ( In Ltr )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
-    22:{ type:"tel", label:"Linked Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
+    22:{ type:"text", label:"Linked Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
     23:{ type:"text", label:"Linked Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name." },
     24:{ type:"radio", label:"Purpose of the Visit", required:true,
          options:[
@@ -2263,9 +2262,9 @@ const VisitForm = (function(){
            {label:"Issue Resolution", value:"Issue Resolution"},
            {label:"Other", value:"__other__", other:true}
          ]},
-    25:{ type:"text", label:"No of Coupons Scanned", required:true, rx:RX.scan, err:"Enter Only No of Coupon Scanned." },
+    25:{ type:"textarea", label:"Mention No of Coupons Scanned", placeholder:"For Inactive to Active & Activate with 5 Coupons, Only mention number of coupons scanned e.g. 4. And for MLP Mention Target=Actual e.g. 5=3", required:true, rx:RX.other, err:"Enter a remark of at least 5 characters." },
 
-    26:{ type:"tel", label:"Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
+    26:{ type:"text", label:"Bizom ID", required:true, rx:RX.bizom, maxLen:6, err:"Enter a valid Bizom ID (4-6 digits)." },
     27:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name." },
     28:{ type:"checkbox", label:"Segment", required:true, options:SEGMENTS.map(o=>({label:o,value:o})) },
     29:{ type:"number", label:"Monthly Potential ( In Ltr )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
