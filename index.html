@@ -1906,7 +1906,7 @@ async function openDocsLocker(){
 const VisitForm = (function(){
 
   const RX = {
-    name:   /^[A-Za-z0-9][A-Za-z0-9 .,&\/'-]{1,99}$/,
+    name:   /^[A-Za-z0-9][A-Za-z0-9 .,_*&\/'-]{1,99}$/,
     mobile: /^(?!.*\s)[0-9]{10}$/,
     bizom:  /^(?!.*\s)[0-9]{4,6}$/,
     share:  /^(?!.*\s)[a-zA-Z0-9]{8,10}$/,
@@ -1956,7 +1956,7 @@ const VisitForm = (function(){
           {label:"Distributor Meet", value:"Distributor Meet"}
         ]},
 
-    3:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter a valid outlet name (2-100 characters)." },
+    3:{ type:"text", label:"Outlet Name", required:true, rx:RX.name, err:"Enter valid outlet name (2-100 characters)." },
     4:{ type:"tel", label:"Mobile Number", required:true, rx:RX.mobile, maxLen:10, err:"Enter a valid 10-digit mobile number." },
     5:{ type:"checkbox", label:"Segment", required:true, options:SEGMENTS.map(o=>({label:o,value:o})) },
     6:{ type:"number", label:"Monthly Potential ( In Ltr )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
@@ -2018,8 +2018,7 @@ const VisitForm = (function(){
          ]},
 
     31:{ type:"number", label:"Collected Order Volume ( In Liters )", required:true, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
-    32:{ type:"number", label:"Volume Plan for the Month If Outlet Plans to order More at the Month End ( Mention In Ltr Only )",
-         help:"MO Contribution | Follow Up Remarks | Support Required", required:false, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
+    32:{ type:"number", label:"Volume Plan for the Month If Outlet Plans to order More at the Month End ( Mention In Ltr Only )",required:false, rx:RX.ltr, maxLen:4, err:"Enter a valid 4-digit number." },
     33:{ type:"textarea", label:"Mention Your Contribution | Visit Remarks | Issues | Support Required in Details.", required:true, rx:RX.para, err:"Enter at least 5 characters." }
   };
 
