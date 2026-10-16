@@ -664,23 +664,29 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 }
 .card,.formCard{-webkit-backdrop-filter:none;backdrop-filter:none;}
 
+.screen.sx-ghost,.screen.sx-in,.screen.sx-return{
+  background-color:#080d17;
+  background-image:radial-gradient(circle at 12% 5%,rgba(67,217,255,.10),transparent 27%),
+    radial-gradient(circle at 92% 18%,rgba(67,217,255,.07),transparent 25%),
+    linear-gradient(145deg,#070b13 0%,#0b1220 52%,#080d17 100%);}
+#screen-camera.sx-ghost,#screen-camera.sx-in,#screen-camera.sx-return{background:#02060c;}
 .screen.sx-ghost{display:flex;position:fixed;margin:0;overflow:hidden;pointer-events:none;}
 .screen.sx-under{z-index:1;transform-origin:50% var(--sx-cy,50%);animation:sxUnder .62s var(--sx-out) both;}
 .screen.sx-out{z-index:3;animation:sxClipOut .4s cubic-bezier(.5,0,.75,0) both,sxDrop .4s cubic-bezier(.5,0,.75,0) both;}
-.screen.sx-in{z-index:2;will-change:clip-path,transform,opacity;transform-origin:50% var(--sx-cy,50%);
+.screen.sx-in{z-index:2;will-change:clip-path,transform;transform-origin:50% var(--sx-cy,50%);
   animation:sxClipIn .52s var(--sx-out) both,sxSpringIn .66s var(--sx-spring) both;}
-.screen.sx-return{will-change:transform,opacity;animation:sxReturn .5s var(--sx-out) both;}
+.screen.sx-return{will-change:transform;animation:sxReturn .5s var(--sx-out) both;}
 
 @keyframes sxClipIn{
-  from{clip-path:inset(var(--sx-cy,50%) 0 calc(100% - var(--sx-cy,50%)) 0 round 22px);opacity:.35;}
-  to{clip-path:inset(0 0 0 0 round 0);opacity:1;}}
+  from{clip-path:inset(var(--sx-cy,50%) 0 calc(100% - var(--sx-cy,50%)) 0 round 22px);}
+  to{clip-path:inset(0 0 0 0 round 0);}}
 @keyframes sxSpringIn{from{transform:translateY(26px) scale(.965);}to{transform:none;}}
 @keyframes sxClipOut{
-  from{clip-path:inset(0 0 0 0 round 0);opacity:1;}
-  to{clip-path:inset(var(--sx-cy,50%) 0 calc(100% - var(--sx-cy,50%)) 0 round 22px);opacity:.6;}}
+  from{clip-path:inset(0 0 0 0 round 0);}
+  to{clip-path:inset(var(--sx-cy,50%) 0 calc(100% - var(--sx-cy,50%)) 0 round 22px);}}
 @keyframes sxDrop{to{transform:translateY(10px) scale(.985);}}
-@keyframes sxUnder{to{transform:scale(.955);opacity:.45;}}
-@keyframes sxReturn{from{transform:scale(.955);opacity:.45;}to{transform:none;opacity:1;}}
+@keyframes sxUnder{to{transform:scale(.96);}}
+@keyframes sxReturn{from{transform:scale(.96);}to{transform:none;}}
 
 /* staggered content drop (zero specificity, so elements with their own animation keep it) */
 :where(.screen.sx-in > *){animation:sxItem .5s var(--sx-out) both;animation-delay:.10s;}
@@ -1059,7 +1065,7 @@ function renderScreen(id, direction){
     next.style.setProperty('--sx-cy', cy+'px');
     next.classList.remove('dir-back');
     next.classList.add('active');
-    window.scrollTo(0, back ? (SX.scroll[id] || 0) : 0);
+    window.scrollTo({top: back ? (SX.scroll[id] || 0) : 0, left:0, behavior:'instant'}); // instant: a smooth scroll here would visibly jolt the page
     next.classList.add(back ? 'sx-return' : 'sx-in');
 
     const endName = back ? 'sxReturn' : 'sxSpringIn';
