@@ -699,6 +699,29 @@ input[type=text],input[type=password],.pjpUpdateBox textarea,.kpiSelect{backgrou
 .fosRing .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .fosRing small{font-size:.7rem;opacity:.85}.fosRing b{font-size:1.5rem}
 .timelineItem,td,th{border-color:#e1e8f5}th{color:#2b7fff}
+/* v2: uniform visit tiles, per-tab page colours, tile back button */
+.statGrid>.card:nth-child(1){background:linear-gradient(160deg,#38bdf8,#0ea5e9);--tg:#0ea5e9}
+.statGrid>.card:nth-child(2){background:linear-gradient(160deg,#0ea5e9,#0284c7);--tg:#0284c7}
+.statGrid>.card:nth-child(3){background:linear-gradient(160deg,#0284c7,#0369a1);--tg:#0369a1}
+.statGrid>.card:nth-child(4){background:linear-gradient(160deg,#0369a1,#075985);--tg:#075985}
+.kpiTile{background:linear-gradient(160deg,#0ea5e9,#075985);--tg:#0369a1}
+#screen-visitreport{--t1:#ffb86b;--t2:#ff7a8a;--tg:rgba(255,122,138,.35)}
+#screen-mastersearch,#screen-exceltool{--t1:#43d9ff;--t2:#6c7cff;--tg:rgba(108,124,255,.35)}
+#screen-summary{--t1:#8b7cff;--t2:#c06cff;--tg:rgba(160,108,255,.35)}
+#screen-docslocker{--t1:#34d399;--t2:#0ea5a5;--tg:rgba(14,165,165,.35)}
+.backBtn{display:inline-flex;align-items:center;align-self:flex-start;gap:4px;padding:9px 16px;margin:0 0 12px;border-radius:14px;color:#fff;font-weight:700;
+background:linear-gradient(135deg,var(--t1,#55f7c5),var(--t2,#43d9ff));box-shadow:0 8px 18px var(--tg,rgba(67,217,255,.35));position:relative;z-index:2}
+.backBtn:hover{color:#fff;transform:none}.backBtn:active{transform:scale(.96)}
+.screen>h1{padding:2px 2px 12px;margin:0 0 10px}
+.screen>h1::before{background:var(--t2,#43d9ff);box-shadow:none;animation:none}
+#screen-visitreport>h1,#screen-mastersearch>h1,#screen-exceltool>h1,#screen-summary>h1,#screen-docslocker>h1{background:linear-gradient(135deg,var(--t1),var(--t2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+#screen-visitreport .btn.primary,#screen-mastersearch .btn.primary,#screen-exceltool .btn.primary,#screen-summary .btn.primary,#screen-docslocker .btn.primary{background:linear-gradient(135deg,var(--t1),var(--t2));color:#fff;box-shadow:0 10px 22px var(--tg)}
+#screen-mastersearch .btn:not(.primary):not(.danger),#screen-visitreport .vfNavBar .btn:not(.primary){color:var(--text)}
+#screen-visitreport .card,#screen-mastersearch .card,#screen-exceltool .card,#screen-summary .card,#screen-docslocker .card{border-top:4px solid var(--t2)}
+#screen-visitreport .formCard::before{background:linear-gradient(90deg,var(--t1),var(--t2))}
+.screen input:focus{outline:none;border-color:var(--t2,#43d9ff)}
+.screen th{color:var(--t2,#2b7fff)}
+.screen>.card,.screen>#vfCard,.screen>#searchResults{margin-bottom:14px}
 /* spring enter for every screen + staggered children */
 .screen.active,.screen.active.dir-back{animation:fosIn .7s var(--spring2) both}
 .screen.active:not(#screen-camera)>*{animation:fosKid .75s var(--spring2) both;animation-delay:calc(var(--i,0)*45ms + 90ms)}
@@ -3788,7 +3811,7 @@ window.orbitLoaderHTML=l=>`<div class="orbitLoaderBox"><div class="loader">${LD}
 window.btnLoaderHTML=()=>`<span class="loader loader--btn">${LD}</span>`;
 /* progress ring tile */
 window.buildRing=function(id,v,t){const pct=t>0?Math.min(1,v/t):0,r=42,c=2*Math.PI*r,el=D.getElementById(id);
-el.innerHTML=`<div class="fosRing"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="9"/><circle class="arc" cx="50" cy="50" r="${r}" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg><div class="ctr"><small>${v}/${t}</small><b>${Math.round(pct*100)}%</b></div></div>`;
+el.innerHTML=`<div class="fosRing"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="9"/><circle class="arc" cx="50" cy="50" r="${r}" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg><div class="ctr"><small>Visits</small><b>${v}/${t}</b></div></div>`;
 el.querySelector('.arc').animate([{strokeDashoffset:c},{strokeDashoffset:c*(1-pct)}],{duration:900,easing:S1,fill:'forwards'})};
 /* tab -> page morph */
 let pend=null,last=null;
