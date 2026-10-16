@@ -659,6 +659,69 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 @keyframes dashInR{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){.dashPage.slideL,.dashPage.slideR{animation:none;}}
 </style>
+<style id="fos-light">
+/* ===== FOS light redesign: colourful tiles, spring screens, morph loader ===== */
+:root{--bg:#eef2f9;--text:#1f2a44;--muted:#6b7794;--shadow-d:rgba(110,125,165,.25);--shadow-l:#fff;--neon:#43d9ff;
+--spring:cubic-bezier(.34,1.3,.5,1);--spring2:cubic-bezier(.3,1.6,.5,1)}
+body{background:#eef2f9!important;color:var(--text)}
+body::before,body::after,.screen::before,.screen::after,.heroTile::after{display:none!important}
+h1{color:var(--text);text-shadow:none}
+.card{background:#fff;border:0;box-shadow:0 10px 30px rgba(60,80,140,.12)}
+.btn{color:var(--text);background:#fff;border:0;box-shadow:0 8px 20px rgba(60,80,140,.12)}
+.btn::before{display:none}
+.btn.primary{background:linear-gradient(135deg,#55f7c5,#43d9ff);color:#06344a;box-shadow:0 10px 22px rgba(67,217,255,.35)}
+.btn.danger{color:#fff;background:linear-gradient(135deg,#ff8a75,#ee4466);box-shadow:0 10px 22px rgba(238,68,102,.3)}
+.btn.outline{background:#fff;color:#5b6b8c;box-shadow:inset 0 0 0 1.5px #d5def0}
+#screen-dashboard .btn:not(.primary):not(.danger){color:#fff;text-align:left;padding:18px 20px;font-weight:700;border-radius:18px}
+#visitReportBtn{background:linear-gradient(135deg,#ffb86b,#ff7a8a)!important;box-shadow:0 10px 22px rgba(255,122,138,.35)!important}
+[onclick*="mastersearch"]{background:linear-gradient(135deg,#43d9ff,#6c7cff)!important;box-shadow:0 10px 22px rgba(108,124,255,.35)!important}
+[onclick^="openSummary"]{background:linear-gradient(135deg,#8b7cff,#c06cff)!important;box-shadow:0 10px 22px rgba(160,108,255,.35)!important}
+[onclick^="openDocsLocker"]{background:linear-gradient(135deg,#34d399,#0ea5a5)!important;box-shadow:0 10px 22px rgba(14,165,165,.35)!important}
+input[type=text],input[type=password],.pjpUpdateBox textarea,.kpiSelect{background:#fff;color:var(--text);border:1.5px solid #d8e0f0;box-shadow:none}
+.backBtn{color:#5b6b8c}.muted,.loaderLabel{color:var(--muted)}
+.toast{background:#fff;color:var(--text);border:0;box-shadow:0 14px 34px rgba(60,80,140,.22);backdrop-filter:none}
+.heroTile{background:linear-gradient(135deg,#7b5cff,#43d9ff)!important;color:#fff}
+.heroTile *{color:#fff}.heroTile .heroCameraBtn{background:rgba(255,255,255,.25);border-color:rgba(255,255,255,.5)}.heroCameraBtn svg{fill:#fff}
+/* gradient tiles (like the progress-ring reference) */
+.chartCard,.ringCard,.kmCard,.kpiTile{color:#fff;border:0;border-radius:24px;box-shadow:0 14px 26px -12px var(--tg,rgba(14,165,255,.5))}
+.statGrid>.card:nth-child(1){background:linear-gradient(160deg,#0aa5ff,#00d4a8);--tg:#0aa5ff}
+.statGrid>.card:nth-child(2){background:linear-gradient(160deg,#8b7cff,#ff7ac8);--tg:#8b7cff}
+.statGrid>.card:nth-child(3){background:linear-gradient(160deg,#00b4f0,#10d9a0);--tg:#00b4f0}
+.statGrid>.card:nth-child(4){background:linear-gradient(160deg,#ffb86b,#ff6f91);--tg:#ff8a75}
+.kpiTile{background:linear-gradient(160deg,#5b6cff,#2bb8ff);--tg:#5b6cff}
+.chartCard *,.ringCard *,.kmCard *,.kpiTile *{color:rgba(255,255,255,.92)!important}
+.chartTitle,.kpiTitle,.kpiLbl{color:rgba(255,255,255,.9)!important;text-transform:none;letter-spacing:.01em;font-size:.82rem}
+.kmBig,.kpiBig{background:none!important;-webkit-text-fill-color:#fff;color:#fff!important}
+.barChart .bar{background:rgba(255,255,255,.92);box-shadow:none}.barChart .bar.below{background:rgba(255,255,255,.38)}.avgLine{border-color:#fff}
+.kpiSwitch,.kpiSelect{background:rgba(255,255,255,.2)!important;border-color:rgba(255,255,255,.4)!important}
+.kpiSwitch .on{background:#fff!important;color:#1f6fe0!important}.kpiSelect option{color:#1f2a44}
+.fosRing{position:relative;width:124px;height:124px;margin:auto}.fosRing svg{display:block;width:100%;height:100%;transform:rotate(-90deg)}
+.fosRing .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.fosRing small{font-size:.7rem;opacity:.85}.fosRing b{font-size:1.5rem}
+.timelineItem,td,th{border-color:#e1e8f5}th{color:#2b7fff}
+/* spring enter for every screen + staggered children */
+.screen.active,.screen.active.dir-back{animation:fosIn .7s var(--spring2) both}
+.screen.active:not(#screen-camera)>*{animation:fosKid .75s var(--spring2) both;animation-delay:calc(var(--i,0)*45ms + 90ms)}
+@keyframes fosIn{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+@keyframes fosKid{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.screen.active,.screen.active>*{animation:none!important}}
+/* Uiverse morph loader (replaces every old loader) */
+.loader{--u:10px;position:relative;display:block;margin:0 auto;aspect-ratio:auto;grid:none;background:none;filter:none;color:inherit;
+width:calc(var(--u)*6.25);height:calc(var(--u)*6.25);animation:fosRot 2.4s linear infinite}
+.loader::before{content:none}.loader--sm{--u:4px;width:calc(var(--u)*6.25)}.loader--lg{--u:12px;width:calc(var(--u)*6.25)}.loader--btn{--u:3.4px;display:inline-block;vertical-align:middle;width:calc(var(--u)*6.25)}
+.loader .white{position:absolute;inset:0;background:#fff;animation:fosFlash 2.4s linear infinite;opacity:0}
+.loader .dot{position:absolute;margin:auto;width:calc(var(--u)*2.4);height:calc(var(--u)*2.4);border-radius:50%;transition:all 1s ease;box-shadow:none;animation-name:none}
+.loader .dot:nth-child(2){top:0;bottom:0;left:0;background:#FF4444;animation:fosY 2.4s linear infinite,fosMorph 7.2s ease-in-out infinite}
+.loader .dot:nth-child(3){left:0;right:0;top:0;background:#FFBB33;animation:fosX 2.4s linear infinite,fosMorph 7.2s ease-in-out infinite}
+.loader .dot:nth-child(4){top:0;bottom:0;right:0;background:#99CC00;animation:fosY 2.4s linear infinite,fosMorph 7.2s ease-in-out infinite}
+.loader .dot:nth-child(5){left:0;right:0;bottom:0;background:#33B5E5;animation:fosX 2.4s linear infinite,fosMorph 7.2s ease-in-out infinite}
+@keyframes fosMorph{0%,100%,16.66%{border-radius:50%;clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}33.33%,50%{border-radius:0;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}66.66%,83.33%{border-radius:25%;clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}}
+@keyframes fosRot{0%{transform:rotate(0)}10%{width:calc(var(--u)*6.25);height:calc(var(--u)*6.25)}66%{width:calc(var(--u)*2.4);height:calc(var(--u)*2.4)}100%{transform:rotate(360deg);width:calc(var(--u)*6.25);height:calc(var(--u)*6.25)}}
+@keyframes fosY{66%{opacity:.1;width:calc(var(--u)*2.4)}77%{opacity:1;width:0}}
+@keyframes fosX{66%{opacity:.1;height:calc(var(--u)*2.4)}77%{opacity:1;height:0}}
+@keyframes fosFlash{33%{opacity:0;border-radius:0}55%{opacity:.6;border-radius:100%}66%{opacity:0}}
+.orbitLoaderBox{height:90px}
+</style>
 </head>
 <body>
 <div id="app">
@@ -3707,6 +3770,52 @@ if(session && session.date === todayStr()){
         .catch(err => console.warn('SW registration failed:', err));
     });
   }
+</script>
+<script id="fos-motion">
+(function(){
+const D=document,$=s=>D.querySelector(s),root=D.documentElement;
+/* real damped springs */
+const ok=CSS.supports('animation-timing-function','linear(0,1)');
+const mk=(z,T)=>{const w0=(4.2/T)/z,wd=w0*Math.sqrt(1-z*z),p=[];for(let i=0;i<=44;i++){const t=T*i/44;p.push(i==44?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4))}return'linear('+p.join(',')+')'};
+const S1=ok?mk(.6,.62):'cubic-bezier(.34,1.3,.5,1)',S2=ok?mk(.5,.75):'cubic-bezier(.3,1.6,.5,1)';
+root.style.setProperty('--spring',S1);root.style.setProperty('--spring2',S2);
+D.querySelectorAll('.screen').forEach(s=>[...s.children].forEach((c,i)=>c.style.setProperty('--i',Math.min(i,8))));
+/* loader */
+const LD='<div class="white"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+const fill=()=>D.querySelectorAll('.loader:empty').forEach(l=>l.innerHTML=LD);
+fill();new MutationObserver(fill).observe(D.body,{childList:true,subtree:true});
+window.orbitLoaderHTML=l=>`<div class="orbitLoaderBox"><div class="loader">${LD}</div></div>${l?`<div class="loaderLabel">${l}</div>`:''}`;
+window.btnLoaderHTML=()=>`<span class="loader loader--btn">${LD}</span>`;
+/* progress ring tile */
+window.buildRing=function(id,v,t){const pct=t>0?Math.min(1,v/t):0,r=42,c=2*Math.PI*r,el=D.getElementById(id);
+el.innerHTML=`<div class="fosRing"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="9"/><circle class="arc" cx="50" cy="50" r="${r}" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c}"/></svg><div class="ctr"><small>${v}/${t}</small><b>${Math.round(pct*100)}%</b></div></div>`;
+el.querySelector('.arc').animate([{strokeDashoffset:c},{strokeDashoffset:c*(1-pct)}],{duration:900,easing:S1,fill:'forwards'})};
+/* tab -> page morph */
+let pend=null,last=null;
+const dash=()=>$('#screen-dashboard');
+D.addEventListener('click',e=>{const b=e.target.closest('#screen-dashboard .btn:not(.danger)');if(b)pend={b,i:[...dash().querySelectorAll('.btn')].indexOf(b),r:b.getBoundingClientRect(),bg:getComputedStyle(b).backgroundImage};setTimeout(()=>pend=null,0)},true);
+const ov=bg=>{const o=D.createElement('div');o.style.cssText='position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:60;pointer-events:none;transform-origin:0 0;background:'+bg;D.body.appendChild(o);return o};
+const frm=r=>{const x=r.width/innerWidth,y=r.height/innerHeight;return{transform:`translate(${r.left}px,${r.top}px) scale(${x},${y})`,borderRadius:`${18/x}px / ${18/y}px`}};
+const FULL={transform:'none',borderRadius:'0px'};
+const offs=(tab,r)=>{const m=r.top+r.height/2;return[...dash().children].filter(e=>e!==tab&&e.offsetHeight).map(e=>{const b=e.getBoundingClientRect();return[e,b.top+b.height/2<m?-r.top-4:innerHeight-r.bottom+4]})};
+const _r=window.renderScreen;
+window.renderScreen=function(id,dir){
+ const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+ if(pend&&!reduce&&id!=='screen-dashboard'&&dash().classList.contains('active')){
+  const p=pend;pend=null;last={i:p.i,bg:p.bg};
+  offs(p.b,p.r).forEach(([e,y])=>e.animate([{transform:'none'},{transform:`translateY(${y}px)`}],{duration:560,easing:S1,fill:'forwards'}));
+  p.b.style.visibility='hidden';
+  const o=ov(p.bg);o.animate([frm(p.r),FULL],{duration:620,easing:S1,fill:'forwards'});
+  setTimeout(()=>{_r.call(window,id,dir);dash().getAnimations({subtree:true}).forEach(a=>a.cancel());p.b.style.visibility='';
+   o.animate([{opacity:1},{opacity:0}],{duration:420,fill:'forwards'}).onfinish=()=>o.remove()},400);return}
+ if(id==='screen-dashboard'&&last&&!reduce){const L=last;last=null;const o=ov(L.bg);
+  _r.call(window,id,dir);const b=dash().querySelectorAll('.btn')[L.i];
+  if(!b){o.remove();return}
+  const r=b.getBoundingClientRect();b.style.visibility='hidden';
+  offs(b,r).forEach(([e,y])=>e.animate([{transform:`translateY(${y}px)`},{transform:'none'}],{duration:640,easing:S1}));
+  o.animate([FULL,frm(r)],{duration:560,easing:S1,fill:'forwards'}).onfinish=()=>{b.style.visibility='';o.remove()};return}
+ return _r.apply(this,arguments)};
+})();
 </script>
 </body>
 </html>
