@@ -645,6 +645,19 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 .kpiRow .sh{color:#ff5f6d;font-weight:700;}.kpiRow .su{color:#55f7c5;font-weight:700;}.kpiRow .z{color:#8d9bb3;}
 @media(max-width:380px){.kpiHero{flex-direction:column;}.kpiSide{width:100%;}}
 @media(prefers-reduced-motion:reduce){.kpiRing .kpiPg{transition:none;}}
+
+/* Dashboard pager: Visits | KPI */
+.dashPager{margin-bottom:14px;touch-action:pan-y;}
+.dashTabs{display:none;gap:4px;padding:4px;margin:0 0 12px;background:rgba(5,11,20,.6);border:1px solid rgba(121,214,255,.13);border-radius:999px;}
+.dashTabs button{flex:1;font:inherit;font-size:.78rem;font-weight:700;color:#8d9bb3;background:transparent;border:0;border-radius:999px;padding:9px 12px;cursor:pointer;}
+.dashTabs button.on{color:#06101c;background:linear-gradient(135deg,#55f7c5,#43d9ff);}
+.dashPage .statGrid{margin-bottom:0;}
+.dashPage .kpiTile{margin-bottom:0;}
+.dashPage.slideL{animation:dashInL .28s cubic-bezier(.16,1,.3,1);}
+.dashPage.slideR{animation:dashInR .28s cubic-bezier(.16,1,.3,1);}
+@keyframes dashInL{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
+@keyframes dashInR{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion:reduce){.dashPage.slideL,.dashPage.slideR{animation:none;}}
 </style>
 </head>
 <body>
@@ -721,19 +734,13 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
       </button>
     </div>
 
-    <div class="card kpiTile" id="kpiTile" style="display:none">
-      <div class="kpiHead">
-        <div class="kpiTitle">KPI Performance</div>
-        <div class="kpiSwitch" role="tablist" aria-label="KPI view">
-          <button type="button" class="on" id="kpiTabOverview" role="tab" aria-selected="true" onclick="setKpiView('overview')">Overview</button>
-          <button type="button" id="kpiTabDetails" role="tab" aria-selected="false" onclick="setKpiView('details')">Details</button>
-        </div>
+    <div class="dashPager" id="dashPager">
+      <div class="dashTabs" id="dashTabs" role="tablist" aria-label="Dashboard">
+        <button type="button" class="on" id="dashTabVisits" role="tab" aria-selected="true" onclick="goDashPage(0)">Visits</button>
+        <button type="button" id="dashTabKpi" role="tab" aria-selected="false" onclick="goDashPage(1)">KPI</button>
       </div>
-      <div class="kpiWho" id="kpiWho" style="display:none"></div>
-      <select class="kpiSelect" id="kpiPick" aria-label="Choose person" style="display:none" onchange="onKpiPick(this.value)"></select>
-      <div id="kpiBody"></div>
-    </div>
-
+      <div id="dashTrack">
+        <div class="dashPage" id="dashPageVisits">
     <div class="statGrid">
       <div class="card chartCard">
         <div class="chartTitle">Visits</div>
@@ -750,6 +757,23 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
       <div class="card kmCard">
         <div class="chartTitle">KM This Month</div>
         <div class="tileBody" id="kmStat"></div>
+      </div>
+    </div>
+        </div>
+        <div class="dashPage" id="dashPageKpi" style="display:none">
+    <div class="card kpiTile" id="kpiTile" style="display:none">
+      <div class="kpiHead">
+        <div class="kpiTitle">KPI Performance</div>
+        <div class="kpiSwitch" role="tablist" aria-label="KPI view">
+          <button type="button" class="on" id="kpiTabOverview" role="tab" aria-selected="true" onclick="setKpiView('overview')">Overview</button>
+          <button type="button" id="kpiTabDetails" role="tab" aria-selected="false" onclick="setKpiView('details')">Details</button>
+        </div>
+      </div>
+      <div class="kpiWho" id="kpiWho" style="display:none"></div>
+      <select class="kpiSelect" id="kpiPick" aria-label="Choose person" style="display:none" onchange="onKpiPick(this.value)"></select>
+      <div id="kpiBody"></div>
+    </div>
+        </div>
       </div>
     </div>
 
@@ -1179,7 +1203,6 @@ async function sendJob(job){
       return {state:'retry', message: (data && data.message) || 'No readable response'};
     }
     const payload = Object.assign({}, job.payload);
-    if(job.kind === 'logPoint' || job.kind === 'endDay') payload.sentAt = new Date().toISOString();
     const r = await api(job.kind, payload, job.kind === 'endDay' ? 45000 : 20000);
     if(r && r.ok) return {state:'done', data:r};
     if(r && r.retry) return {state:'retry', message:r.message};
@@ -1408,6 +1431,7 @@ async function doLogin(){
     session = {userId, userName:r.userName || userId, pjp:r.pjp || '', date: todayStr()};
     lsSet('sfos_session', JSON.stringify(session));
     loadDayState();
+    await syncDayFromServer();
     document.getElementById('pjpContent').innerHTML = formatPJP(r.pjp);
     document.getElementById('pjpUpdateBox').style.display = 'none';
     document.getElementById('confirmPjpBtn').style.display = 'block';
@@ -1946,11 +1970,10 @@ async function completeCapture(prepared){
     enqueueJob('logPoint', {
       userId: session.userId, id: point.id, type: point.type,
       lat: point.lat, lng: point.lng, accuracy: point.accuracy, address: point.address,
-      capturedAt: point.time,
-      date: istDateStr(capturedAt), time: point.time    // kept so an older backend version still works
+      date: istDateStr(capturedAt), time: point.time     // the phone's own date (IST) and time
     });
     if(pendingCaptureType === 'end'){
-      endJob = enqueueJob('endDay', { userId: session.userId, capturedAt: point.time });
+      endJob = enqueueJob('endDay', { userId: session.userId, date: istDateStr(capturedAt) });
     }
   }
 
@@ -2190,6 +2213,7 @@ function kpiReset(){
   kpi = kpiBlank();
   const tile = document.getElementById('kpiTile');
   if(tile) tile.style.display = 'none';
+  setPagerHasKpi(false);
 }
 
 function setKpiView(v){
@@ -2204,8 +2228,9 @@ function onKpiPick(i){
 function renderKpiTile(){
   const tile = document.getElementById('kpiTile');
   if(!tile) return;
-  if(!kpi.rows.length || !kpi.names.length){ tile.style.display = 'none'; kpi.sig = ''; return; }
+  if(!kpi.rows.length || !kpi.names.length){ tile.style.display = 'none'; kpi.sig = ''; setPagerHasKpi(false); return; }
   tile.style.display = 'block';
+  setPagerHasKpi(true);
   const sig = JSON.stringify([kpi.userId, kpi.pick, kpi.view, kpi.names, kpi.rows]);
   if(sig === kpi.sig) return;            // same data, same view: don't redraw (keeps the tile steady)
   kpi.sig = sig;
@@ -2291,6 +2316,63 @@ async function loadKpi(force){
   }catch(e){ /* keep whatever is on screen; it is tried again next time the dashboard opens */ }
   finally{ kpi.loading = false; }
 }
+
+/* ====================== DASHBOARD PAGER (Visits | KPI) ======================
+ * The Visits dashboard (the four tiles) and the KPI dashboard share one tab: swipe left/right, or tap the
+ * Visits / KPI switch. The switch and the KPI page appear only for people who are tagged in the KPIDashboard
+ * tab; everyone else just sees the Visits dashboard, as before. */
+let dashIdx = 0;          // 0 = Visits, 1 = KPI
+let dashHasKpi = false;
+
+function paintDash(animate, dir){
+  const pV = document.getElementById('dashPageVisits'), pK = document.getElementById('dashPageKpi');
+  const tabV = document.getElementById('dashTabVisits'), tabK = document.getElementById('dashTabKpi');
+  if(!pV || !pK) return;
+  const showK = dashHasKpi && dashIdx === 1;
+  pV.style.display = showK ? 'none' : 'block';
+  pK.style.display = showK ? 'block' : 'none';
+  tabV.classList.toggle('on', !showK); tabV.setAttribute('aria-selected', String(!showK));
+  tabK.classList.toggle('on', showK);  tabK.setAttribute('aria-selected', String(showK));
+  if(animate){
+    const pg = showK ? pK : pV;
+    pg.classList.remove('slideL', 'slideR');
+    void pg.offsetWidth;                                    // restart the little slide-in
+    pg.classList.add(dir > 0 ? 'slideL' : 'slideR');
+  }
+}
+function goDashPage(i, animate){
+  const target = (dashHasKpi && i) ? 1 : 0;
+  if(target === dashIdx){ paintDash(false); return; }
+  const dir = target > dashIdx ? 1 : -1;
+  dashIdx = target;
+  paintDash(animate !== false, dir);
+}
+function setPagerHasKpi(has){
+  dashHasKpi = !!has;
+  const tabs = document.getElementById('dashTabs');
+  if(tabs) tabs.style.display = has ? 'flex' : 'none';
+  if(!has) dashIdx = 0;
+  paintDash(false);
+}
+(function initPager(){
+  const pager = document.getElementById('dashPager');
+  if(!pager) return;
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+  pager.addEventListener('touchstart', e=>{
+    if(!dashHasKpi || !e.touches || e.touches.length !== 1) return;
+    if(e.target && e.target.closest && e.target.closest('select,input,textarea')) return;    // let the person picker work normally
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); tracking = true;
+  }, {passive:true});
+  pager.addEventListener('touchend', e=>{
+    if(!tracking) return;
+    tracking = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if(!t) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if(Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - t0 < 800) goDashPage(dx < 0 ? 1 : 0);
+  }, {passive:true});
+  pager.addEventListener('touchcancel', ()=>{ tracking = false; }, {passive:true});
+})();
 
 async function loadDashboardStats(){
   try{
@@ -3436,7 +3518,7 @@ async function buildDayEndTimeline(job){
   if(!job){   // screen restored after a reload — make sure the summary is on the server and show it
     const endPt = [...sorted].reverse().find(p=>p.type==='end');
     job = outbox.find(j=>j.kind==='endDay' && j.payload && j.payload.userId===session.userId)
-       || (endPt ? enqueueJob('endDay', {userId: session.userId, capturedAt: endPt.time}) : null);
+       || (endPt ? enqueueJob('endDay', {userId: session.userId, date: istDateStr(new Date(endPt.time))}) : null);
   }
   if(!job) return;
   watchJob(job, (st, res)=>{
@@ -3467,6 +3549,35 @@ function loadDayState(){
 }
 function saveDayState(){
   if(session) lsSet(DAY_KEY, JSON.stringify({userId: session.userId, date: todayStr(), points: todayLog}));
+}
+/* Another phone or browser may already have started (or finished) today for this person. Ask the server what is
+   stored for today and merge it in, so a second login carries on the same day instead of asking to
+   "Start the Day" again. If the network is down, the phone's own record is used. */
+function mergeServerPoints(points){
+  const key = p => p.type + '|' + new Date(p.time).getTime();
+  const have = new Set(todayLog.map(key));
+  let added = 0;
+  points.forEach(sp=>{
+    if(!sp || !KM_TRACKED_TYPES.includes(sp.type) || isNaN(new Date(sp.time))) return;
+    const k = key(sp);
+    if(have.has(k)) return;
+    todayLog.push({id:'srv-' + k, type:sp.type, lat:sp.lat, lng:sp.lng, accuracy:null, address:'', shortAddress:'', time:new Date(sp.time).toISOString()});
+    have.add(k); added++;
+  });
+  if(added){
+    todayLog.sort((a,b)=> new Date(a.time) - new Date(b.time));
+    saveDayState();
+  }
+  dayStarted = todayLog.some(p=>p.type === 'start');
+  dayEnded = todayLog.some(p=>p.type === 'end');
+}
+async function syncDayFromServer(){
+  if(!session) return;
+  const uid = session.userId;
+  try{
+    const r = await api('getDayState', {userId: uid, date: todayStr()}, 8000);
+    if(session && session.userId === uid && r && r.ok && Array.isArray(r.points)) mergeServerPoints(r.points);
+  }catch(e){ /* offline: keep what this phone knows */ }
 }
 function finishLogout(){
   lsDel('sfos_session');
@@ -3564,6 +3675,7 @@ renderSyncBadge();
 flushOutbox();
 if(session && session.date === todayStr()){
   loadDayState();
+  syncDayFromServer().then(()=>updateDashboardButtons());
   setGreeting();
   updateDashboardButtons();
   restoreScreenAfterReload();
