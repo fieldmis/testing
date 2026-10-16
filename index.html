@@ -658,6 +658,42 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 @keyframes dashInL{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
 @keyframes dashInR{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){.dashPage.slideL,.dashPage.slideR{animation:none;}}
+
+/* ===== TAB-TO-PAGE SPRING TRANSITIONS =====
+   Tapped button grows into the page, every other block is pushed off-screen, Back / swipe-down shrinks it home.
+   Only transform / translate / opacity animate (compositor). No blur, no backdrop-filter, no clip-path. */
+:root{--sx-spring:cubic-bezier(.34,1.3,.5,1);--sx-spring2:cubic-bezier(.3,1.6,.5,1);--sxW:min(100vw,500px);--sx-bg:#0a101b}
+.screen.active,.screen.active.dir-back{animation:none}
+.screen.active.sxPlain{animation:sxPlainIn .55s var(--sx-spring2) backwards}
+.screen.active.sxPlain.dir-back{animation-name:sxPlainBack}
+@keyframes sxPlainIn{from{opacity:0;translate:26px 8px}to{opacity:1;translate:none}}
+@keyframes sxPlainBack{from{opacity:0;translate:-26px 8px}to{opacity:1;translate:none}}
+html.sxBusy,body.sxBusy,#app.sxBusy{overflow:hidden}
+#app.sxLock .screen{pointer-events:none}
+.sxKeep{display:flex!important}
+.sxMoving>*{will-change:translate;transition:translate .62s var(--sx-spring)!important}
+.sxNoTx>*{transition:none!important}
+.sxOut>*{translate:0 var(--push,0px)}
+.sxSheet,.sxLeave{position:fixed!important;top:0;bottom:0;left:50%;width:var(--sxW);margin-left:calc(var(--sxW)/-2);z-index:30;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
+.sxLeave{display:flex!important;overflow-y:hidden;pointer-events:none}
+.sxLeave.sxGo>*{opacity:0;transition:opacity .18s ease!important}
+.sxSheet .card,.sxHold .card{animation:none!important}
+.sxEntering>*:not(.sxGrab){opacity:0;translate:0 26px}
+.sxEntering.sxFlat>*{translate:none!important}
+.sxEntering.sxIn>*:not(.sxGrab){opacity:1;translate:none;transition:opacity .3s ease calc(.18s + var(--i,0)*.05s),translate .75s var(--sx-spring2) calc(.18s + var(--i,0)*.05s)!important}
+.sxDrag{background:var(--sx-bg);border-radius:22px 22px 0 0;box-shadow:0 -14px 44px rgba(0,0,0,.5)}
+.sxOv{position:fixed;top:0;bottom:0;left:50%;width:var(--sxW);margin-left:calc(var(--sxW)/-2);z-index:20;overflow:hidden;pointer-events:none;transform-origin:0 0;
+  transform:translate(var(--tx,0px),var(--ty,0px)) scale(var(--sx,1),var(--sy,1));border-radius:var(--br,0);will-change:transform;
+  transition:transform .62s var(--sx-spring),border-radius .2s ease .22s}
+.sxOv.full{transform:none;border-radius:0;transition:transform .62s var(--sx-spring),border-radius .14s ease-out}
+.sxOv.noTx,.sxOv.noTx *{transition:none!important}
+.sxFill,.sxDark{position:absolute;inset:0}
+.sxDark{background:var(--sx-bg);opacity:0;transition:opacity .3s ease .06s}
+.sxOv.dark .sxDark{opacity:1}
+.sxGrab{display:none;flex:none;position:relative;z-index:3;padding:4px 0 12px;touch-action:none;cursor:grab}
+.sxGrab i{display:block;width:46px;height:5px;margin:0 auto;border-radius:3px;background:rgba(137,196,255,.38)}
+.screen.sxCan>.sxGrab{display:block}
+.screen.sxCan>h1{touch-action:none;cursor:grab}
 </style>
 </head>
 <body>
@@ -3707,6 +3743,175 @@ if(session && session.date === todayStr()){
         .catch(err => console.warn('SW registration failed:', err));
     });
   }
+</script>
+<script>
+/* ===== TAB-TO-PAGE SPRING TRANSITIONS =====
+   Wraps renderScreen(): every button that opens a page grows into it, Back shrinks it home,
+   swipe-down on the handle / title closes it. Anything without a tapped source keeps a spring slide-in. */
+(function(){
+  'use strict';
+  if(typeof renderScreen!=='function') return;
+  const $=id=>document.getElementById(id), app=$('app'), root=document.documentElement;
+  const SHEETS=['screen-visitreport','screen-mastersearch','screen-summary','screen-docslocker','screen-exceltool','screen-camera'];
+  const FLAT={'screen-camera':1};
+  const rawRender=renderScreen;
+  const reduce=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* real damped springs as linear() curves; the CSS cubic-béziers are the fallback */
+  try{
+    if(CSS.supports('animation-timing-function','linear(0,1)')){
+      const make=(z,D)=>{const w0=(4.2/D)/z,wd=w0*Math.sqrt(1-z*z),N=44,p=[];
+        for(let i=0;i<=N;i++){const t=D*i/N;p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
+        return 'linear('+p.join(',')+')';};
+      root.style.setProperty('--sx-spring',make(.6,.62)); root.style.setProperty('--sx-spring2',make(.5,.75));
+    }
+  }catch(e){}
+
+  /* html{scroll-behavior:smooth} would animate scrollTo() and leave every measured rect stale, so jump instantly */
+  try{ history.scrollRestoration='manual'; }catch(e){}   /* on Back the browser would otherwise smooth-scroll the dashboard mid-morph */
+  const jump=y=>window.scrollTo({top:y||0,left:0,behavior:'instant'});
+  let stack=[], lastTap=null, undo=null, undoTimers=[], swipeClosing=false, drag=null;
+
+  document.addEventListener('click',e=>{const b=e.target.closest('.btn,.heroCameraBtn'); if(b) lastTap={el:b,t:performance.now()};},true);
+
+  function busy(on,lock){ [root,document.body,app].forEach(n=>n.classList.toggle('sxBusy',on)); app.classList.toggle('sxLock',!!(on&&lock)); }
+  function later(fn,ms){ const t=setTimeout(fn,ms); undoTimers.push(t); return t; }
+  function finishNow(){ undoTimers.forEach(clearTimeout); undoTimers=[]; if(undo){ const u=undo; undo=null; u(); } }
+  function clearPush(scr){ [...scr.children].forEach(el=>el.style.removeProperty('--push')); }
+
+  /* the page layer, parked exactly over the source button (start / end shape of the morph) */
+  function makeOv(src,r){
+    const cs=getComputedStyle(src), W=Math.min(innerWidth,500), L=(innerWidth-W)/2, H=innerHeight;
+    const sx=r.width/W, sy=r.height/H, ov=document.createElement('div');
+    ov.className='sxOv noTx';
+    const fill=document.createElement('div'); fill.className='sxFill';
+    fill.style.backgroundImage=cs.backgroundImage; fill.style.backgroundColor=cs.backgroundColor;
+    const dark=document.createElement('div'); dark.className='sxDark';
+    ov.append(fill,dark);
+    const s=ov.style, br=cs.borderTopLeftRadius, px=parseFloat(br)||0;
+    s.setProperty('--tx',(r.left-L)+'px'); s.setProperty('--ty',r.top+'px'); s.setProperty('--sx',sx); s.setProperty('--sy',sy);
+    s.setProperty('--br',/%/.test(br)?br:(px/sx)+'px / '+(px/sy)+'px');   /* counter-scaled so corners look round */
+    return ov;
+  }
+  /* blocks above the source are pushed up, blocks below pushed down, by the distance its edges travel */
+  function setPush(scr,src,r){
+    const mid=r.top+r.height/2;
+    [...scr.children].forEach(el=>{
+      const e=el.getBoundingClientRect();
+      if(el===src||el.contains(src)||el.classList.contains('sxGrab')||!e.height){ el.style.setProperty('--push','0px'); return; }
+      el.style.setProperty('--push',((e.top+e.height/2<mid)?-(r.top+4):(innerHeight-r.bottom+4))+'px');
+    });
+  }
+
+  function openMorph(src,fromId,id){
+    const fromEl=$(fromId), to=$(id), r=src.getBoundingClientRect();
+    const ov=makeOv(src,r); app.appendChild(ov);
+    setPush(fromEl,src,r);
+    busy(true,true);
+    fromEl.classList.add('sxKeep','sxMoving'); src.style.visibility='hidden';
+    rawRender(id);
+    to.classList.add('sxSheet','sxEntering'); to.classList.toggle('sxFlat',!!FLAT[id]); to.classList.toggle('sxCan',!FLAT[id]);
+    let i=0; [...to.children].forEach(el=>{ if(!el.classList.contains('sxGrab')) el.style.setProperty('--i',Math.min(i++,8)); });
+    void app.offsetWidth;                                   /* commit the start state, then animate */
+    ov.classList.remove('noTx'); ov.classList.add('full','dark'); fromEl.classList.add('sxOut'); to.classList.add('sxIn');
+    undo=()=>{
+      ov.remove(); fromEl.classList.remove('sxKeep','sxOut','sxMoving'); clearPush(fromEl); src.style.visibility='';
+      to.classList.remove('sxSheet','sxEntering','sxIn','sxFlat'); to.classList.add('sxHold');
+      [...to.children].forEach(el=>el.style.removeProperty('--i')); busy(false); jump(0);
+    };
+    later(()=>{ ov.style.transition='opacity .22s ease'; ov.style.opacity='0'; },680);
+    later(()=>{ const u=undo; undo=null; if(u) u(); },920);
+  }
+
+  function closeMorph(entry,fromId,id){
+    const fromEl=$(fromId), to=$(id), src=entry.src, sy=window.scrollY;
+    rawRender(id,'back'); jump(entry.sy);              /* land exactly where the button was when tapped */
+    const r=(src.isConnected&&src.getClientRects().length)?src.getBoundingClientRect():null;
+    if(!r||r.width<2||r.height<2){ to.classList.add('sxPlain'); return; }
+    busy(true,true);
+    fromEl.classList.add('sxLeave'); fromEl.scrollTop=sy;
+    const ov=makeOv(src,r); ov.classList.add('full','dark'); app.appendChild(ov);
+    setPush(to,src,r);
+    to.classList.add('sxMoving','sxOut','sxNoTx','sxHold'); src.style.visibility='hidden';
+    void app.offsetWidth;
+    ov.classList.remove('noTx','full','dark'); to.classList.remove('sxNoTx','sxOut'); fromEl.classList.add('sxGo');
+    undo=()=>{
+      ov.remove(); fromEl.classList.remove('sxLeave','sxGo'); to.classList.remove('sxMoving','sxNoTx','sxOut');
+      clearPush(to); src.style.visibility=''; busy(false);
+    };
+    later(()=>{ const u=undo; undo=null; if(u) u(); },720);
+  }
+
+  renderScreen=function(id,direction){
+    const cur=document.querySelector('.screen.active'), from=cur?cur.id:null, top=stack[stack.length-1];
+    const quiet=swipeClosing; swipeClosing=false;
+    if(!quiet) finishNow();
+    document.querySelectorAll('.sxHold').forEach(e=>{ if(e.id!==id) e.classList.remove('sxHold'); });
+    document.querySelectorAll('.sxPlain').forEach(e=>e.classList.remove('sxPlain'));
+    const ok=from && from!==id && !reduce();
+    if(ok && top && top.id===from && top.parent===id){            /* going back to where the button lives */
+      stack.pop(); $(from).classList.remove('sxCan');
+      if(quiet){ rawRender(id,'back'); finishNow(); jump(top.sy); $(id).classList.add('sxHold'); return; }
+      return closeMorph(top,from,id);
+    }
+    if(quiet){ rawRender(id,direction); finishNow(); return; }
+    if(ok && direction!=='back' && SHEETS.indexOf(id)>-1 && lastTap && performance.now()-lastTap.t<800
+       && cur.contains(lastTap.el) && lastTap.el.getClientRects().length){
+      const src=lastTap.el; lastTap=null; stack.push({id:id,parent:from,src:src,sy:window.scrollY});
+      return openMorph(src,from,id);
+    }
+    if(id==='screen-dashboard'||id==='screen-login'||id==='screen-pjp') stack=[];
+    const t=$(id); if(t && from!==id) t.classList.add('sxPlain');
+    return rawRender(id,direction);
+  };
+
+  /* ---- swipe down on the handle / title: finger-tracked, springs back if released early ---- */
+  SHEETS.forEach(id=>{
+    if(FLAT[id]) return; const s=$(id); if(!s||s.querySelector(':scope>.sxGrab')) return;
+    const g=document.createElement('div'); g.className='sxGrab'; g.innerHTML='<i></i>'; s.insertBefore(g,s.firstChild);
+  });
+  document.addEventListener('pointerdown',e=>{
+    const h=e.target.closest('.sxGrab,.screen.sxCan>h1'); if(!h||drag) return;
+    const sheet=h.closest('.screen'), top=stack[stack.length-1];
+    if(!top||top.id!==sheet.id||!sheet.classList.contains('active')||undo||window.scrollY>4) return;
+    drag={sheet:sheet,top:top,P:$(top.parent),y:e.clientY,dy:0,v:0,ly:e.clientY,lt:performance.now(),on:false};
+    try{ h.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  document.addEventListener('pointermove',e=>{
+    if(!drag) return;
+    if(!drag.on){
+      if(Math.abs(e.clientY-drag.y)<4) return;
+      drag.on=true; const {sheet,top,P}=drag, src=top.src;
+      busy(true,false); sheet.classList.add('sxSheet','sxDrag');
+      P.classList.add('sxKeep','sxMoving','sxNoTx');
+      jump(top.sy); setPush(P,src,src.getBoundingClientRect()); P.classList.add('sxOut'); src.style.visibility='hidden';
+      void app.offsetWidth; P.classList.remove('sxNoTx','sxOut');         /* blocks slide back in behind the page */
+      undo=()=>{ sheet.classList.remove('sxSheet','sxDrag'); sheet.style.transform=sheet.style.transition='';
+        P.classList.remove('sxKeep','sxMoving','sxNoTx','sxOut'); clearPush(P); src.style.visibility=''; busy(false); jump(0); };
+    }
+    const now=performance.now(); drag.dy=Math.max(0,e.clientY-drag.y);
+    drag.v=(e.clientY-drag.ly)/Math.max(1,now-drag.lt); drag.ly=e.clientY; drag.lt=now;
+    drag.sheet.style.transform='translateY('+drag.dy+'px)';
+  });
+  function dragEnd(){
+    if(!drag) return; const d=drag; drag=null; if(!d.on) return;
+    const {sheet,top,P}=d;
+    if(d.dy>140||d.v>.7){
+      sheet.style.transition='transform .28s cubic-bezier(.4,0,1,1)'; sheet.style.transform='translateY(100%)';
+      later(()=>{
+        swipeClosing=true;
+        const st=history.state;
+        if(st&&st.screen===sheet.id) history.back(); else replaceScreen(top.parent,'back');
+        later(()=>{ if(swipeClosing){ swipeClosing=false; finishNow(); } },700);   /* safety: nobody handled it */
+      },290);
+    } else {
+      sheet.style.transition='transform .5s var(--sx-spring)'; sheet.style.transform=''; P.classList.add('sxOut');
+      later(()=>{ const u=undo; undo=null; if(u) u(); },540);
+    }
+  }
+  document.addEventListener('pointerup',dragEnd);
+  document.addEventListener('pointercancel',dragEnd);
+})();
 </script>
 </body>
 </html>
