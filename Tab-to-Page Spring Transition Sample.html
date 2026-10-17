@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tab-to-Page Spring Transition Sample</title>
+<style>
+/* Smoothness: after the first ~0.2s every frame animates transform only (compositor, no repaint).
+   No blur, no backdrop-filter, no clip-path. Text is never scaled. */
+:root{
+  color-scheme:dark;
+  --bg:#070b13;--muted:#8d9bb3;--ink:#06101c;
+  --a1:#55f7c5;--a2:#43d9ff;--a3:#8b7cff;
+  --spring:cubic-bezier(.34,1.3,.5,1);           /* fallbacks; JS upgrades both to real damped springs */
+  --spring2:cubic-bezier(.3,1.6,.5,1);
+  --ease:cubic-bezier(.4,0,.2,1);
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:inherit;-webkit-tap-highlight-color:transparent}
+html{height:100%;background:var(--bg);scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--bg);color:#eaf3ff;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow-x:hidden}
+body.open{overflow:hidden}
+
+/* ---------- home: every block moves away when a tab opens ---------- */
+.home{max-width:480px;margin:0 auto;padding:22px 18px 48px}
+.home>*{will-change:transform;transition:transform .42s var(--ease)}
+.home.out>*{transform:translateY(var(--push,0px));transition:transform .62s var(--spring)}
+h1{margin:6px 0 4px;font-size:1.5rem}
+.sub{color:var(--muted);margin:0 0 20px;font-size:.9rem}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px}
+.stat{background:linear-gradient(145deg,#111d31,#0b1322);border:1px solid rgba(121,214,255,.14);border-radius:20px;padding:16px}
+.stat small{display:block;color:var(--muted);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase}
+.stat b{display:block;margin-top:6px;font-size:1.7rem;color:var(--a2)}
+.tab{display:flex;align-items:center;justify-content:space-between;width:100%;margin:0 0 12px;padding:18px 20px;border:0;border-radius:18px;
+  font:inherit;font-weight:700;color:var(--ink);background:linear-gradient(135deg,var(--a1),var(--a2));cursor:pointer}
+.tab:nth-of-type(2){background:linear-gradient(135deg,var(--a2),var(--a3))}
+.tab:nth-of-type(3){background:linear-gradient(135deg,var(--a3),#c06cff)}
+.tab:nth-of-type(4){background:linear-gradient(135deg,#ffb86b,#ff7a8a)}
+.tab span{font-size:1.3rem;opacity:.7}
+.tab.src{visibility:hidden}
+
+/* ---------- the page: the tab's own rectangle grows to full screen ---------- */
+.sheet{position:fixed;inset:0;z-index:10;visibility:hidden;transition:transform .45s var(--spring),visibility 0s linear .45s;will-change:transform}
+.sheet.open{visibility:visible;transition-delay:0s}
+.sheet.dragging{transition:none}
+.sheet.instant,.sheet.instant *{transition:none!important}
+.sheet-bg{position:absolute;inset:0;overflow:hidden;transform-origin:0 0;
+  transform:translate(var(--tx,0px),var(--ty,0px)) scale(var(--sx,1),var(--sy,1));border-radius:var(--br,0);
+  transition:transform .42s var(--ease),border-radius .2s ease .22s;will-change:transform}
+.sheet.open .sheet-bg{transform:none;border-radius:0;transition:transform .62s var(--spring),border-radius .2s ease-out}
+.bg-fill{position:absolute;inset:0}                      /* same gradient as the tapped tab */
+.sheet-body{position:absolute;inset:0;display:flex;flex-direction:column;color:var(--ink);opacity:0;transform:translateY(60px);
+  padding-top:env(safe-area-inset-top,0px);transition:opacity .12s ease,transform .2s ease;will-change:transform}
+.sheet.open .sheet-body{opacity:1;transform:none;transition:opacity .25s ease .16s,transform .75s var(--spring2) .14s}   /* the bounce when the page fills */
+.grab{flex:none;padding:10px 0 4px;touch-action:none;cursor:grab}
+.grab i{display:block;width:48px;height:5px;margin:0 auto;border-radius:3px;background:rgba(6,16,28,.3)}
+.bar{flex:none;display:flex;align-items:center;gap:12px;padding:6px 18px 14px;touch-action:none}
+.back{border:0;background:rgba(6,16,28,.14);color:var(--ink);font:inherit;font-weight:700;font-size:.85rem;padding:9px 14px;border-radius:12px;cursor:pointer}
+.bar h2{margin:0;font-size:1.2rem}
+.content{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:4px 18px calc(28px + env(safe-area-inset-bottom,0px));max-width:480px;width:100%;margin:0 auto}
+.content>*{opacity:0;transform:translateY(26px);transition:opacity .1s ease,transform .1s ease}
+.sheet.open .content>*{opacity:1;transform:none;transition:opacity .3s ease calc(.2s + var(--i,0)*.05s),transform .75s var(--spring2) calc(.2s + var(--i,0)*.05s)}
+.row{display:flex;align-items:center;gap:12px;padding:15px 16px;margin-bottom:10px;border-radius:14px;background:rgba(255,255,255,.34);font-weight:600}
+.row .dot{width:18px;height:18px;border-radius:50%;border:2px solid rgba(6,16,28,.55);flex:none}
+.row b{margin-left:auto}
+.lbl{font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;opacity:.65;margin:6px 2px 10px}
+input{width:100%;font:inherit;color:var(--ink);background:rgba(255,255,255,.5);border:0;border-radius:14px;padding:14px 16px;margin-bottom:12px}
+input::placeholder{color:rgba(6,16,28,.55)}
+.cta{width:100%;border:0;border-radius:16px;padding:16px;font:inherit;font-weight:700;color:#eaf3ff;background:var(--ink)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<main class="home" id="home">
+  <h1>Good morning, Admin</h1>
+  <p class="sub">Tap a tab: it grows into the page and pushes everything else away. Press Back, or swipe the handle down, to close.</p>
+  <div class="stats">
+    <div class="stat"><small>Today's visits</small><b>2/15</b></div>
+    <div class="stat"><small>KM this month</small><b>3757.9</b></div>
+  </div>
+  <button class="tab" data-p="visit">Submit Visit Report <span>›</span></button>
+  <button class="tab" data-p="search">Master Search <span>›</span></button>
+  <button class="tab" data-p="summary">Summary <span>›</span></button>
+  <button class="tab" data-p="docs">Docs Locker <span>›</span></button>
+</main>
+
+<section class="sheet" id="sheet" aria-hidden="true">
+  <div class="sheet-bg" id="bg"><div class="bg-fill" id="fill"></div></div>
+  <div class="sheet-body">
+    <div class="grab" id="grab"><i></i></div>
+    <div class="bar" id="bar"><button class="back" id="backBtn">‹ Back</button><h2 id="title"></h2></div>
+    <div class="content" id="content"></div>
+  </div>
+</section>
+
+<script>
+const PAGES = {
+  visit:{t:'Submit Visit Report',h:`<div class="lbl">Type of visit</div>
+    ${['New Outlet Visit','Existing Outlet Visit','New Mechanic Visit','Existing Mechanic Visit','Distributor Meet'].map(x=>`<div class="row"><span class="dot"></span>${x}</div>`).join('')}
+    <button class="cta">Next</button>`},
+  search:{t:'Master Search',h:`<input placeholder="Search outlet or code"><div class="lbl">Recent</div>
+    ${['Sharma Auto Spares','Patel Motors','Krishna Lubricants','Om Garage'].map((x,i)=>`<div class="row">${x}<b>#${1040+i}</b></div>`).join('')}`},
+  summary:{t:'Summary',h:`<div class="lbl">This week</div>
+    ${[['Visits','13'],['Hours worked','10.8'],['Km travelled','142'],['New outlets','3']].map(r=>`<div class="row">${r[0]}<b>${r[1]}</b></div>`).join('')}`},
+  docs:{t:'Docs Locker',h:`<div class="lbl">Documents</div>
+    ${['Price list','Scheme circular','Product catalogue','Beat plan'].map(x=>`<div class="row">${x}<b>Open</b></div>`).join('')}`}
+};
+const $ = id => document.getElementById(id);
+const home=$('home'), sheet=$('sheet'), bg=$('bg'), fill=$('fill'), content=$('content'), title=$('title');
+let isOpen=false, pushed=false, srcTab=null;
+
+/* Real damped springs as CSS linear() curves: --spring ≈10% overshoot (page fill), --spring2 ≈16% (content bounce). */
+(function(){
+  try{
+    if(!CSS.supports('animation-timing-function','linear(0,1)')) return;
+    const make=(z,D)=>{const w0=(4.2/D)/z,wd=w0*Math.sqrt(1-z*z),N=44,p=[];
+      for(let i=0;i<=N;i++){const t=D*i/N;p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
+      return 'linear('+p.join(',')+')';};
+    const r=document.documentElement.style;
+    r.setProperty('--spring',make(.6,.62)); r.setProperty('--spring2',make(.5,.75));
+  }catch(e){}
+})();
+
+/* park the page layer exactly over a tab = start / end shape of the transition */
+function place(tab){
+  const r=tab.getBoundingClientRect(), sx=r.width/innerWidth, sy=r.height/innerHeight, s=bg.style;
+  s.setProperty('--tx',r.left+'px'); s.setProperty('--ty',r.top+'px');
+  s.setProperty('--sx',sx); s.setProperty('--sy',sy);
+  s.setProperty('--br',(18/sx)+'px / '+(18/sy)+'px');      /* counter-scaled so the corners look round */
+}
+/* blocks above the tab are pushed up, blocks below pushed down, by exactly the distance its edges travel */
+function setPush(tab){
+  const r=tab.getBoundingClientRect(), mid=r.top+r.height/2;
+  [...home.children].forEach(el=>{
+    if(el===tab) return el.style.setProperty('--push','0px');
+    const e=el.getBoundingClientRect(), above=e.top+e.height/2<mid;
+    el.style.setProperty('--push',(above? -r.top-4 : innerHeight-r.bottom+4)+'px');
+  });
+}
+
+function openSheet(key, tab){
+  if(isOpen) return; isOpen=true; srcTab=tab;
+  const pg=PAGES[key];
+  title.textContent=pg.t; content.innerHTML=pg.h; content.scrollTop=0;
+  [...content.children].forEach((el,i)=>el.style.setProperty('--i',Math.min(i,8)));
+  fill.style.backgroundImage=getComputedStyle(tab).backgroundImage;   /* page = the tab's colour */
+  sheet.classList.add('instant'); place(tab); sheet.getBoundingClientRect(); sheet.classList.remove('instant');
+  setPush(tab); tab.classList.add('src');
+  sheet.setAttribute('aria-hidden','false');
+  sheet.getBoundingClientRect();                       /* commit the start state, then animate */
+  sheet.classList.add('open'); home.classList.add('out'); document.body.classList.add('open');
+  try{ history.pushState({sheet:key},''); pushed=true; }catch(e){ pushed=false; }
+}
+function collapse(){                                   /* Back button / Android back */
+  if(!isOpen) return; isOpen=false;
+  const t=srcTab; place(t);                            /* shrink back into the tab's position */
+  sheet.classList.remove('open'); home.classList.remove('out'); document.body.classList.remove('open');
+  sheet.setAttribute('aria-hidden','true');
+  setTimeout(()=>t.classList.remove('src'),430);
+}
+function silentClose(){                                /* after a swipe-away: reset with no animation */
+  isOpen=false; if(srcTab) srcTab.classList.remove('src');
+  sheet.classList.add('instant');
+  sheet.classList.remove('open','dragging'); home.classList.remove('out'); document.body.classList.remove('open');
+  sheet.style.transform=sheet.style.transition='';
+  sheet.setAttribute('aria-hidden','true');
+  sheet.getBoundingClientRect(); sheet.classList.remove('instant');
+}
+
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>openSheet(b.dataset.p,b)));
+$('backBtn').addEventListener('click',()=>{ if(pushed){ pushed=false; history.back(); } else collapse(); });
+addEventListener('popstate',()=>{ pushed=false; collapse(); });
+
+/* ---- swipe down on the handle / title bar: finger-tracked, springs back if released early ---- */
+let d=null;
+function down(e){ if(!isOpen||e.target.closest('.back')) return;
+  d={y:e.clientY,dy:0,v:0,ly:e.clientY,lt:performance.now()};
+  e.currentTarget.setPointerCapture(e.pointerId);
+  sheet.classList.add('dragging'); home.classList.remove('out'); }       /* blocks slide back in behind the page */
+function move(e){ if(!d) return;
+  const now=performance.now(); d.dy=Math.max(0,e.clientY-d.y);
+  d.v=(e.clientY-d.ly)/Math.max(1,now-d.lt); d.ly=e.clientY; d.lt=now;
+  sheet.style.transform=`translateY(${d.dy}px)`; }
+function up(){ if(!d) return; const {dy,v}=d; d=null; sheet.classList.remove('dragging');
+  if(dy>140||v>.7){
+    sheet.style.transition='transform .28s cubic-bezier(.4,0,1,1)'; sheet.style.transform='translateY(100%)';
+    setTimeout(()=>{ silentClose(); if(pushed){ pushed=false; history.back(); } },290);
+  } else { sheet.style.transform=''; home.classList.add('out'); }       /* spring back */
+}
+['grab','bar'].forEach(id=>{ const el=$(id);
+  el.addEventListener('pointerdown',down); el.addEventListener('pointermove',move);
+  el.addEventListener('pointerup',up); el.addEventListener('pointercancel',up); });
+</script>
+</body>
+</html>
