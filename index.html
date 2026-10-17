@@ -131,38 +131,6 @@
          background:#fff;color:#888;font-size:.9rem;z-index:1;}
 
     .loaderWrap{text-align:center;padding:26px 0;}
-    .loader{
-      width:44px;aspect-ratio:1;display:grid;grid:50%/50%;margin:0 auto;
-      color:var(--accent2);
-      --_g:no-repeat linear-gradient(currentColor 0 0);
-      background:var(--_g),var(--_g),var(--_g);
-      background-size:50.1% 50.1%;
-      animation:l6-0 1.5s infinite steps(1) alternate, l6-0-0 3s infinite steps(1);
-    }
-    .loader::before{
-      content:"";
-      background:currentColor;
-      transform:perspective(150px) rotateY(0deg) rotateX(0deg);
-      transform-origin:bottom right;
-      animation:l6-1 1.5s infinite linear alternate;
-    }
-    .loader.loader--sm{width:24px;}
-    .loader.loader--lg{width:64px;}
-    @keyframes l6-0{
-      0%  {background-position:0 100%,100% 100%,100% 0}
-      33% {background-position:100% 100%,100% 100%,100% 0}
-      66% {background-position:100% 0,100% 0,100% 0}
-    }
-    @keyframes l6-0-0{
-      0%  {transform:scaleX(1) rotate(0deg)}
-      50% {transform:scaleX(-1) rotate(-90deg)}
-    }
-    @keyframes l6-1{
-      16.5%{transform:perspective(150px) rotateX(-90deg) rotateY(0deg) rotateX(0deg);filter:grayscale(.8)}
-      33%  {transform:perspective(150px) rotateX(-180deg) rotateY(0deg) rotateX(0deg)}
-      66%  {transform:perspective(150px) rotateX(-180deg) rotateY(-180deg) rotateX(0deg)}
-      100% {transform:perspective(150px) rotateX(-180deg) rotateY(-180deg) rotateX(-180deg);filter:grayscale(.8)}
-    }
     .loaderLabel{margin-top:10px;color:var(--muted);font-size:.85rem;}
 
     .orbitLoaderBox{display:flex;align-items:center;justify-content:center;height:104px;}
@@ -290,8 +258,6 @@ input[type=text]:focus,input[type=password]:focus,.pjpUpdateBox textarea:focus{o
 .backBtn{color:#8ea5c0;transition:transform .2s,color .2s;}.backBtn:hover{color:var(--accent3);transform:translateX(-3px);}
 .formCard{background:rgba(245,247,250,.96);}
 .toast{background:rgba(16,25,40,.92);border:1px solid rgba(67,217,255,.25);color:#f4f8ff;box-shadow:0 18px 40px rgba(0,0,0,.38),0 0 20px rgba(67,217,255,.08);backdrop-filter:blur(16px);}
-.loader{color:#43d9ff;filter:drop-shadow(0 0 10px rgba(67,217,255,.35));}
-.loader::before{filter:drop-shadow(0 0 6px rgba(85,247,197,.3));}
 .timelineItem{border-color:rgba(121,214,255,.12);}
 .pjpList li::marker{color:var(--accent3);}
 @keyframes ambientFloat{from{transform:translate(0,0)}to{transform:translate(180px,-40px)}}
@@ -371,7 +337,6 @@ body{min-height:100dvh;letter-spacing:.01em}
 #captureBtn:hover::after{box-shadow:0 0 34px rgba(85,247,197,.62)}
 #flipCameraBtn{width:56px;height:56px}
 .loaderWrap{min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.loader{width:52px}
 .orbitLoaderBox{height:120px}
 .toast{bottom:22px;padding:14px 18px;min-width:220px;text-align:center;animation:toastPop .35s cubic-bezier(.16,1,.3,1)}
 
@@ -659,9 +624,85 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 @keyframes dashInR{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
 @media (prefers-reduced-motion:reduce){.dashPage.slideL,.dashPage.slideR{animation:none;}}
 </style>
+
+<style id="sx-theme">
+/* ===== NEW LOADER (4 morphing dots) ===== size it with font-size on .loader ===== */
+.loader{position:relative;display:block;margin:0 auto;font-size:9px;width:6.25em;height:6.25em;animation:ldr-rotate 2.4s linear infinite;}
+.loader.loader--sm{font-size:4px;}
+.loader.loader--lg{font-size:12px;}
+.loader>.lw{position:absolute;top:0;bottom:0;left:0;right:0;background:#fff;animation:ldr-flash 2.4s linear infinite;opacity:0;}
+.loader>.ld{position:absolute;margin:auto;width:2.4em;height:2.4em;border-radius:50%;transition:all 1s ease;}
+.loader>.ld:nth-child(2){top:0;bottom:0;left:0;background:#FF4444;animation:ldr-dotsY 2.4s linear infinite,ldr-morph 7.2s ease-in-out infinite;}
+.loader>.ld:nth-child(3){left:0;right:0;top:0;background:#FFBB33;animation:ldr-dotsX 2.4s linear infinite,ldr-morph 7.2s ease-in-out infinite;}
+.loader>.ld:nth-child(4){top:0;bottom:0;right:0;background:#99CC00;animation:ldr-dotsY 2.4s linear infinite,ldr-morph 7.2s ease-in-out infinite;}
+.loader>.ld:nth-child(5){left:0;right:0;bottom:0;background:#33B5E5;animation:ldr-dotsX 2.4s linear infinite,ldr-morph 7.2s ease-in-out infinite;}
+@keyframes ldr-morph{
+  0%,100%{border-radius:50%;clip-path:polygon(0% 0%,100% 0%,100% 100%,0% 100%);}
+  16.66%{border-radius:50%;clip-path:polygon(0% 0%,100% 0%,100% 100%,0% 100%);}
+  33.33%{border-radius:0%;clip-path:polygon(30% 0%,70% 0%,100% 30%,100% 70%,70% 100%,30% 100%,0% 70%,0% 30%);}
+  50%{border-radius:0%;clip-path:polygon(30% 0%,70% 0%,100% 30%,100% 70%,70% 100%,30% 100%,0% 70%,0% 30%);}
+  66.66%{border-radius:25%;clip-path:polygon(0% 0%,100% 0%,100% 100%,0% 100%);}
+  83.33%{border-radius:25%;clip-path:polygon(0% 0%,100% 0%,100% 100%,0% 100%);}}
+@keyframes ldr-rotate{0%{transform:rotate(0);}10%{width:6.25em;height:6.25em;}66%{width:2.4em;height:2.4em;}100%{transform:rotate(360deg);width:6.25em;height:6.25em;}}
+@keyframes ldr-dotsY{66%{opacity:.1;width:2.4em;}77%{opacity:1;width:0;}}
+@keyframes ldr-dotsX{66%{opacity:.1;height:2.4em;}77%{opacity:1;height:0;}}
+@keyframes ldr-flash{33%{opacity:0;border-radius:0%;}55%{opacity:.6;border-radius:100%;}66%{opacity:0;}}
+
+/* ===== TAB-TO-PAGE TRANSITION =====
+   A dashboard tab grows from its own spot into a full page in the same colour, the other blocks are pushed
+   away, and everything reverses on Back. Only transform/opacity animate (plus a 0.2s corner-radius ease). */
+:root{--sx-spring:cubic-bezier(.34,1.3,.5,1);--sx-spring2:cubic-bezier(.3,1.6,.5,1);--sx-ease:cubic-bezier(.4,0,.2,1);}
+
+/* coloured dashboard tabs */
+.btn[data-mod=v]{--c1:#55f7c5;--c2:#43d9ff;} .btn[data-mod=m]{--c1:#43d9ff;--c2:#8b7cff;}
+.btn[data-mod=s]{--c1:#8b7cff;--c2:#c06cff;} .btn[data-mod=d]{--c1:#ffb86b;--c2:#ff7a8a;}
+#screen-dashboard > .btn[data-mod],#screen-dashboard #visitReportBtn[data-mod]{
+  background:linear-gradient(135deg,var(--c1),var(--c2)) !important;color:#06101c !important;border:0 !important;
+  box-shadow:0 10px 24px rgba(0,0,0,.28) !important;font-weight:700;}
+#screen-dashboard > .btn[data-mod]::before{display:none;}
+#screen-dashboard > .btn[data-mod]::after{color:rgba(6,16,28,.65);}
+#screen-dashboard > .btn.src{visibility:hidden !important;}
+
+/* the page layer: starts exactly on the tapped tab, grows to full screen */
+#sxBg{position:fixed;top:0;bottom:0;left:50%;width:min(100vw,500px);margin-left:calc(min(100vw,500px) / -2);z-index:2;
+  visibility:hidden;pointer-events:none;overflow:hidden;background:var(--grad,linear-gradient(135deg,#55f7c5,#43d9ff));
+  transform-origin:0 0;transform:translate(var(--tx,0px),var(--ty,0px)) scale(var(--sx,1),var(--sy,1));border-radius:var(--br,0);
+  transition:transform .42s var(--sx-ease),border-radius .2s ease .22s;will-change:transform;}
+#sxBg.on{visibility:visible;}
+#sxBg.open{transform:none;border-radius:0;transition:transform .62s var(--sx-spring),border-radius .2s ease-out;}
+#sxBg.sx-inst{transition:none !important;}
+
+body.sxp .screen{z-index:3;}
+body.sxp .screen.sx-below{z-index:1;}
+
+/* readable text on the coloured page */
+body.sxp .screen h1{color:#06101c;text-shadow:none;}
+body.sxp .screen .backBtn{color:#06101c !important;background:rgba(6,16,28,.14) !important;border:0 !important;box-shadow:none !important;
+  padding:9px 14px;border-radius:12px;font-weight:700;align-self:flex-start;}
+body.sxp #vfCard{background:rgba(9,15,25,.92);border:1px solid rgba(121,214,255,.14);border-radius:22px;padding:18px;margin-bottom:14px;}
+
+/* frozen outgoing screens */
+.screen.sx-ghost{display:flex;position:fixed;box-sizing:border-box;pointer-events:none;overflow:hidden;}
+.screen.sx-ghost.sx-dash{z-index:1;}
+.screen.sx-ghost.sx-mod{z-index:4;}
+.screen.sx-ex > *{transition:transform .62s var(--sx-spring);}
+.screen.sx-ret > *{transition:transform .42s var(--sx-ease);}
+.screen.sx-pushed > *{transform:translateY(var(--push,0px));}
+.screen.sx-nt > *{transition:none !important;}
+.screen.sx-fade{animation:sxFadeOut .16s ease forwards;}
+@keyframes sxFadeOut{to{opacity:0;}}
+
+/* incoming page content: staggered drop with a small bounce once the page has filled */
+.screen.active.sx-enter{animation:none;}
+.screen.sx-enter > *:not(.vfNavBar){animation:sxIn .7s var(--sx-spring2) both;animation-delay:calc(.16s + var(--i,0) * .045s);}
+.screen.sx-enter > .vfNavBar{animation:sxFadeIn .35s ease .3s both;}
+@keyframes sxIn{from{opacity:0;transform:translateY(28px);}to{opacity:1;transform:translateY(0);}}
+@keyframes sxFadeIn{from{opacity:0;}to{opacity:1;}}
+</style>
 </head>
 <body>
 <div id="app">
+  <div id="sxBg" aria-hidden="true"></div>
 
   <!-- LOGIN -->
   <div class="screen active" id="screen-login">
@@ -707,7 +748,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
         <div class="stampMapBox" id="stampMapBox">
           <div id="stampMinimap"></div>
           <div class="stampMapPin"></div>
-          <div class="stampLoader" id="stampLoader"><div class="loader loader--sm"></div></div>
+          <div class="stampLoader" id="stampLoader"><div class="loader loader--sm"><span class="lw"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span></div></div>
         </div>
         <div class="stampData">
           <div class="stampHeading" id="stampHeading">Locating…</div>
@@ -779,10 +820,10 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 
     <button class="syncBadge" id="syncBadge" type="button" style="display:none" onclick="flushOutbox(true)"></button>
     <button class="btn primary" id="startDayBtn" onclick="handleStartDay()">Start the Day</button>
-    <button class="btn" id="visitReportBtn" style="display:none;" onclick="showScreen('screen-visitreport')">Submit Visit Report</button>
-    <button class="btn" onclick="showScreen('screen-mastersearch')">Master Search</button>
-    <button class="btn" onclick="openSummary()">Summary</button>
-    <button class="btn" onclick="openDocsLocker()">Docs Locker</button>
+    <button class="btn" id="visitReportBtn" data-mod="v" style="display:none;" onclick="showScreen('screen-visitreport')">Submit Visit Report</button>
+    <button class="btn" data-mod="m" onclick="showScreen('screen-mastersearch')">Master Search</button>
+    <button class="btn" data-mod="s" onclick="openSummary()">Summary</button>
+    <button class="btn" data-mod="d" onclick="openDocsLocker()">Docs Locker</button>
     <button class="btn danger" id="endDayBtn" onclick="handleEndDay()">End the Day</button>
     <button class="btn danger" id="logoutBtn" style="display:none;" onclick="finishLogout()">Log Out</button>
   </div>
@@ -838,7 +879,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
   <div class="screen" id="screen-summary">
     <button class="backBtn" onclick="goBack()">‹ Back</button>
     <h1>Summary</h1>
-    <div class="card" id="summaryContent"><div class="loaderWrap"><div class="loader"></div><div class="loaderLabel">Loading summary…</div></div></div>
+    <div class="card" id="summaryContent"><div class="loaderWrap"><div class="loader"><span class="lw"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span></div><div class="loaderLabel">Loading summary…</div></div></div>
     <button class="btn primary" id="shareSummaryBtn" style="display:none" onclick="shareSummaryImage()">Share Summary</button>
   </div>
 
@@ -950,11 +991,126 @@ document.getElementById('installBtn').addEventListener('click', async ()=>{
 });
 
 /* ---- Navigation ---- */
+/* Tab-to-page transition. Screens opened from the dashboard module tabs (Visit Report, Master Search,
+   Summary, Docs Locker) grow out of the tapped tab; Back shrinks them into it. Everything else keeps
+   the original screen animations. */
+const SX_FAM = {visitreport:'v', mastersearch:'m', exceltool:'m', summary:'s', docslocker:'d'};
+const SX_COL = {v:['#55f7c5','#43d9ff'], m:['#43d9ff','#8b7cff'], s:['#8b7cff','#c06cff'], d:['#ffb86b','#ff7a8a']};
+const SX = {cur:null, fam:null, scroll:0};
+const sxBg = document.getElementById('sxBg');
+
+// Real damped springs as CSS linear() curves (fallbacks stay as cubic-bezier).
+(function(){
+  try{
+    if(!CSS.supports('animation-timing-function','linear(0,1)')) return;
+    const make=(z,D)=>{const w0=(4.2/D)/z, wd=w0*Math.sqrt(1-z*z), N=44, p=[];
+      for(let i=0;i<=N;i++){const t=D*i/N; p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
+      return 'linear('+p.join(',')+')';};
+    const r=document.documentElement.style;
+    r.setProperty('--sx-spring',make(.6,.62)); r.setProperty('--sx-spring2',make(.5,.75));
+  }catch(e){}
+})();
+
+function sxFamOf(id){ return SX_FAM[String(id).replace('screen-','')] || null; }
+function sxTabOf(f){
+  const t = document.querySelector('#screen-dashboard > [data-mod="'+f+'"]');
+  return (t && t.style.display !== 'none') ? t : null;      // Visit Report tab is hidden until the day starts
+}
+function sxVH(){ return document.documentElement.clientHeight; }
+function sxPlace(tab){                                      // park the page layer exactly over a tab
+  const r=tab.getBoundingClientRect(), W=Math.min(innerWidth,500), L=(innerWidth-W)/2, H=sxVH();
+  const sx=r.width/W, sy=r.height/H, s=sxBg.style;
+  s.setProperty('--tx',(r.left-L)+'px'); s.setProperty('--ty',r.top+'px');
+  s.setProperty('--sx',sx); s.setProperty('--sy',sy);
+  s.setProperty('--br',(18/sx)+'px / '+(18/sy)+'px');       // counter-scaled so corners look round
+}
+function sxInstant(f){                                      // set the tinted page with no animation
+  sxBg.classList.add('sx-inst');
+  if(f){
+    sxBg.style.setProperty('--grad','linear-gradient(135deg,'+SX_COL[f][0]+','+SX_COL[f][1]+')');
+    sxBg.classList.add('on','open'); document.body.classList.add('sxp');
+  } else { sxBg.classList.remove('on','open'); document.body.classList.remove('sxp'); }
+  SX.fam = f || null;
+  sxBg.getBoundingClientRect(); sxBg.classList.remove('sx-inst');
+}
+function sxFreeze(el){                                      // pin a screen exactly where it is
+  const r=el.getBoundingClientRect(), saved=el.style.cssText;
+  el.style.cssText = saved+';position:fixed;top:'+r.top+'px;left:'+r.left+'px;width:'+r.width+'px;height:'+r.height+'px;margin:0;';
+  return saved;
+}
+function sxPush(screen, tab){                               // blocks above go up, blocks below go down
+  const r=tab.getBoundingClientRect(), mid=r.top+r.height/2, H=sxVH();
+  [...screen.children].forEach(el=>{
+    if(el===tab){ el.style.setProperty('--push','0px'); return; }
+    const e=el.getBoundingClientRect(); if(!e.height) return;
+    el.style.setProperty('--push', ((e.top+e.height/2 < mid) ? -r.top-4 : H-r.bottom+4)+'px');
+  });
+}
+function sxClearPush(screen){ [...screen.children].forEach(el=>el.style.removeProperty('--push')); }
+function sxFinish(){ if(SX.cur){ const c=SX.cur; SX.cur=null; c.done(); } }   // never let two transitions overlap
+
+function sxExpand(prev, next, f, tab){
+  const kids=[...next.children];
+  kids.forEach((el,i)=>el.style.setProperty('--i',Math.min(i,7)));
+  SX.scroll = window.scrollY;
+  sxPush(prev, tab);                                        // measure before anything moves
+  const saved = sxFreeze(prev);
+  prev.classList.remove('active','dir-back'); prev.classList.add('sx-ghost','sx-ex','sx-dash');
+  tab.classList.add('src');
+  sxBg.classList.add('sx-inst'); sxPlace(tab);
+  sxBg.style.setProperty('--grad','linear-gradient(135deg,'+SX_COL[f][0]+','+SX_COL[f][1]+')');
+  sxBg.classList.remove('open'); sxBg.classList.add('on');
+  document.body.classList.add('sxp'); SX.fam=f;
+  next.classList.remove('dir-back'); next.classList.add('active','sx-enter');
+  window.scrollTo({top:0,left:0,behavior:'instant'});
+  sxBg.getBoundingClientRect(); sxBg.classList.remove('sx-inst');   // commit the start shape
+  prev.getBoundingClientRect();
+  sxBg.classList.add('open'); prev.classList.add('sx-pushed');      // go
+  const t1=setTimeout(endGhost,720), t2=setTimeout(done,1300);
+  function endGhost(){
+    if(!prev.classList.contains('sx-ghost')) return;
+    prev.classList.remove('sx-ghost','sx-ex','sx-dash','sx-pushed'); prev.style.cssText=saved;
+    sxClearPush(prev); tab.classList.remove('src');
+  }
+  function done(){ clearTimeout(t1); clearTimeout(t2); endGhost(); next.classList.remove('sx-enter'); kids.forEach(el=>el.style.removeProperty('--i')); }
+  SX.cur={done};
+}
+
+function sxCollapse(prev, next, f){
+  const saved = sxFreeze(prev);
+  prev.classList.remove('active','dir-back'); prev.classList.add('sx-ghost','sx-mod','sx-fade');
+  next.classList.remove('dir-back'); next.classList.add('active','sx-below','sx-ret');
+  window.scrollTo({top:SX.scroll||0,left:0,behavior:'instant'});
+  const tab = sxTabOf(f);
+  tab.classList.add('src'); sxPush(next, tab); sxPlace(tab);
+  next.classList.add('sx-pushed','sx-nt'); next.getBoundingClientRect();   // start with everything pushed away
+  sxBg.classList.remove('open'); next.classList.remove('sx-nt','sx-pushed'); // page shrinks, blocks slide back
+  const t=setTimeout(done,560);
+  function done(){
+    clearTimeout(t);
+    prev.classList.remove('sx-ghost','sx-mod','sx-fade'); prev.style.cssText=saved;
+    next.classList.remove('sx-below','sx-ret'); sxClearPush(next); tab.classList.remove('src');
+    sxInstant(null);
+  }
+  SX.cur={done};
+}
+
 function renderScreen(id, direction){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active','dir-back'));
-  const el = document.getElementById(id);
-  if(direction==='back') el.classList.add('dir-back');
-  el.classList.add('active');
+  sxFinish();
+  const next = document.getElementById(id);
+  const prev = document.querySelector('.screen.active');
+  const nf = sxFamOf(id), pf = prev ? sxFamOf(prev.id) : null;
+  const can = !!prev && prev!==next && !suppressHistoryPush && !document.hidden &&
+              !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  let tab;
+  if(can && prev.id==='screen-dashboard' && nf && (tab=sxTabOf(nf))) sxExpand(prev, next, nf, tab);
+  else if(can && id==='screen-dashboard' && pf && sxTabOf(pf)) sxCollapse(prev, next, pf);
+  else {
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active','dir-back'));
+    if(direction==='back') next.classList.add('dir-back');
+    next.classList.add('active');
+    if(nf !== SX.fam) sxInstant(nf);                         // keep the tinted page in step with the screen
+  }
   if(session && id!=='screen-login') lsSet('sfos_screen', id); // for reload restore
   if(id==='screen-visitreport') VisitForm.reset();
   if(id==='screen-dashboard' && session){ loadDashboardStats(); loadKpi(); }
@@ -1107,8 +1263,9 @@ function toast(msg){
   toastTimer = setTimeout(()=>t.style.display='none',3000);
 }
 
+const LOADER_DOTS = '<span class="lw"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span><span class="ld"></span>';
 function orbitLoaderHTML(label){
-  return `<div class="orbitLoaderBox"><div class="loader"></div></div>${label?`<div class="loaderLabel">${label}</div>`:''}`;
+  return `<div class="orbitLoaderBox"><div class="loader">${LOADER_DOTS}</div></div>${label?`<div class="loaderLabel">${label}</div>`:''}`;
 }
 function btnLoaderHTML(){
   return `<span class="btnLoader"><span class="bdot"></span><span class="bdot"></span><span class="bdot"></span><span class="bdot"></span></span>`;
