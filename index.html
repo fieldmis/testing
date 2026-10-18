@@ -2272,22 +2272,22 @@ function renderKpiTile(){
     let h = '<div class="kpiTb"><div class="kpiRow kpiH"><span>KPI</span><span class="v">Target</span><span class="v">Ach.</span><span class="v">Short / Surplus</span></div>';
     kpi.mains.forEach((m, k) => {
       const d = M(k);
+      h += `<div class="kpiGrp">${esc(m.name)}</div>`;          // every main KPI gets the same heading
       if(m.subs && m.subs.length){
-        h += `<div class="kpiGrp">${esc(m.name)}</div>`;
         m.subs.forEach((sn, j) => {
           const sd = (d.s && d.s[j]) || {}, t = num(sd.t), a = num(sd.a);
           h += `<div class="kpiRow sub"><span class="n">${esc(sn)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
         });
       } else {
         const t = num(d.t), a = num(d.a);
-        h += `<div class="kpiRow"><span class="n">${esc(m.name)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
+        h += `<div class="kpiRow sub"><span class="n">Total</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
       }
     });
     body.innerHTML = h + '</div>';
   } else {
     // Overview: only the main KPIs' achievement %, exactly as shown in the sheet
     const C = 2 * Math.PI * 64;
-    const oTxt = kpiPtxt(row.o), oVal = kpiPv(row.o);
+    const oTxt = String(row.o == null ? '' : row.o).trim() || '\u2014', oVal = kpiPv(row.o);
     body.innerHTML =
       '<div class="kpiHero"><div class="kpiRing"><svg viewBox="0 0 150 150"><defs><linearGradient id="kpiG" x1="0" y1="0" x2="1" y2="1">' +
       '<stop offset="0" stop-color="#55f7c5"/><stop offset=".6" stop-color="#43d9ff"/><stop offset="1" stop-color="#8b7cff"/></linearGradient></defs>' +
