@@ -642,6 +642,7 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 .kpiRow.kpiH{padding-top:0;font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:#8d9bb3;font-weight:700;}
 .kpiRow .n{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .kpiRow .v{text-align:right;}
+.kpiGrp{padding:12px 0 4px;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#43d9ff;border-bottom:1px solid rgba(121,214,255,.13);}.kpiGrp:first-child{padding-top:2px;}.kpiRow.sub .n{padding-left:10px;font-weight:500;color:#c9d6ea;}
 .kpiRow .sh{color:#ff5f6d;font-weight:700;}.kpiRow .su{color:#55f7c5;font-weight:700;}.kpiRow .z{color:#8d9bb3;}
 @media(max-width:380px){.kpiHero{flex-direction:column;}.kpiSide{width:100%;}}
 @media(prefers-reduced-motion:reduce){.kpiRing .kpiPg{transition:none;}}
@@ -2200,12 +2201,16 @@ const KPI_LABELS = {                      // heading in the sheet (lower case) -
   'inactive to active': 'Inactive → Active',
   'sha mco': 'SHA / New MCO', 'sha / new mco': 'SHA / New MCO'
 };
-function kpiBlank(){ return {userId:null, names:[], rows:[], isAdmin:false, pick:0, view:'overview', at:0, loading:false, sig:''}; }
+function kpiBlank(){ return {userId:null, mains:[], rows:[], isAdmin:false, pick:0, view:'overview', at:0, loading:false, sig:''}; }
 let kpi = kpiBlank();
 
 function kpiLabel(h){ const k = String(h == null ? '' : h).trim(); return KPI_LABELS[k.toLowerCase()] || k; }
 function kpiFmt(n, d){ return Number(n).toLocaleString('en-IN', {maximumFractionDigits: d == null ? 1 : d}); }
 function kpiPctText(x){ return kpiFmt(x * 100, 1) + '%'; }
+/* % values come from the sheet exactly as displayed there (e.g. "88%", "100.84%"); the app never calculates them.
+ * kpiPv() only reads the number back out of that text to pick a colour / ring length. */
+function kpiPv(txt){ const n = parseFloat(String(txt == null ? '' : txt).replace('%','').replace(/,/g,'')); return isFinite(n) ? n / 100 : 0; }
+function kpiPtxt(txt){ const t = String(txt == null ? '' : txt).trim(); return t || '0%'; }
 function kpiScore(a, t){ return t > 0 ? Math.min(a / t, KPI_CAP) : 0; }
 function kpiClass(p){ return p >= KPI_CAP - 1e-9 ? 'cap' : p >= 1 ? 'ok' : p >= 0.7 ? 'mid' : 'low'; }
 
@@ -2228,19 +2233,16 @@ function onKpiPick(i){
 function renderKpiTile(){
   const tile = document.getElementById('kpiTile');
   if(!tile) return;
-  if(!kpi.rows.length || !kpi.names.length){ tile.style.display = 'none'; kpi.sig = ''; setPagerHasKpi(false); return; }
+  if(!kpi.rows.length || !kpi.mains.length){ tile.style.display = 'none'; kpi.sig = ''; setPagerHasKpi(false); return; }
   tile.style.display = 'block';
   setPagerHasKpi(true);
-  const sig = JSON.stringify([kpi.userId, kpi.pick, kpi.view, kpi.names, kpi.rows]);
+  const sig = JSON.stringify([kpi.userId, kpi.pick, kpi.view, kpi.mains, kpi.rows]);
   if(sig === kpi.sig) return;            // same data, same view: don't redraw (keeps the tile steady)
   kpi.sig = sig;
 
   const row = kpi.rows[kpi.pick] || kpi.rows[0];
-  const n = kpi.names.length;
-  const T = k => Number(row.t && row.t[k]) || 0;
-  const A = k => Number(row.a && row.a[k]) || 0;
-  const scores = kpi.names.map((_, k) => kpiScore(A(k), T(k)));
-  const overall = scores.reduce((s, p) => s + p, 0) / n;
+  const M = k => (row.m && row.m[k]) || {};
+  const num = v => Number(v) || 0;
 
   // who is being shown
   const pickEl = document.getElementById('kpiPick');
@@ -2261,24 +2263,40 @@ function renderKpiTile(){
   tabD.classList.toggle('on', kpi.view === 'details');  tabD.setAttribute('aria-selected', kpi.view === 'details');
 
   const body = document.getElementById('kpiBody');
+  const shortSurplus = (t, a) => {
+    const d = a - t, r = Math.round(d * 10) / 10;
+    return `<span class="v ${r < 0 ? 'sh' : r > 0 ? 'su' : 'z'}">${r > 0 ? '+' : r < 0 ? '−' : ''}${kpiFmt(Math.abs(d))}</span>`;
+  };
   if(kpi.view === 'details'){
-    body.innerHTML = '<div class="kpiTb"><div class="kpiRow kpiH"><span>KPI</span><span class="v">Target</span><span class="v">Ach.</span><span class="v">Short / Surplus</span></div>' +
-      kpi.names.map((name, k) => {
-        const d = A(k) - T(k), r = Math.round(d * 10) / 10;
-        return `<div class="kpiRow"><span class="n">${esc(name)}</span><span class="v">${kpiFmt(T(k))}</span><span class="v">${kpiFmt(A(k))}</span>` +
-               `<span class="v ${r < 0 ? 'sh' : r > 0 ? 'su' : 'z'}">${r > 0 ? '+' : r < 0 ? '−' : ''}${kpiFmt(Math.abs(d))}</span></div>`;
-      }).join('') + '</div>';
+    // Details: Target / Achievement for every KPI. Sub-KPIs (Sub-Target / Sub-Achievement) are listed here only.
+    let h = '<div class="kpiTb"><div class="kpiRow kpiH"><span>KPI</span><span class="v">Target</span><span class="v">Ach.</span><span class="v">Short / Surplus</span></div>';
+    kpi.mains.forEach((m, k) => {
+      const d = M(k);
+      if(m.subs && m.subs.length){
+        h += `<div class="kpiGrp">${esc(m.name)}</div>`;
+        m.subs.forEach((sn, j) => {
+          const sd = (d.s && d.s[j]) || {}, t = num(sd.t), a = num(sd.a);
+          h += `<div class="kpiRow sub"><span class="n">${esc(sn)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
+        });
+      } else {
+        const t = num(d.t), a = num(d.a);
+        h += `<div class="kpiRow"><span class="n">${esc(m.name)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
+      }
+    });
+    body.innerHTML = h + '</div>';
   } else {
+    // Overview: only the main KPIs' achievement %, exactly as shown in the sheet
     const C = 2 * Math.PI * 64;
+    const oTxt = kpiPtxt(row.o), oVal = kpiPv(row.o);
     body.innerHTML =
       '<div class="kpiHero"><div class="kpiRing"><svg viewBox="0 0 150 150"><defs><linearGradient id="kpiG" x1="0" y1="0" x2="1" y2="1">' +
       '<stop offset="0" stop-color="#55f7c5"/><stop offset=".6" stop-color="#43d9ff"/><stop offset="1" stop-color="#8b7cff"/></linearGradient></defs>' +
       '<circle class="kpiTr" cx="75" cy="75" r="64"/><circle class="kpiPg" id="kpiPg" cx="75" cy="75" r="64" stroke-dasharray="0 ' + C + '"/></svg>' +
-      '<div class="kpiCtr"><div class="kpiBig" id="kpiOverall">' + kpiPctText(overall) + '</div><div class="kpiLbl">Overall</div></div></div>' +
+      '<div class="kpiCtr"><div class="kpiBig" id="kpiOverall">' + esc(oTxt) + '</div><div class="kpiLbl">Overall</div></div></div>' +
       '<div class="kpiSide"><div class="kpiLbl">KPI achievement</div>' +
-      kpi.names.map((name, k) => `<div class="kpiSr ${kpiClass(scores[k])}"><span>${esc(name)}</span><b>${kpiPctText(scores[k])}</b></div>`).join('') +
+      kpi.mains.map((m, k) => { const p = M(k).p; return `<div class="kpiSr ${kpiClass(kpiPv(p))}"><span>${esc(m.name)}</span><b>${esc(kpiPtxt(p))}</b></div>`; }).join('') +
       '</div></div>';
-    const dash = (overall / KPI_CAP) * C;
+    const dash = (Math.min(oVal, KPI_CAP) / KPI_CAP) * C;
     requestAnimationFrame(() => {                        // let the ring grow from empty
       const pg = document.getElementById('kpiPg');
       if(pg) pg.setAttribute('stroke-dasharray', dash + ' ' + C);
@@ -2287,7 +2305,8 @@ function renderKpiTile(){
 }
 
 function applyKpi(r, at){
-  kpi.names = (Array.isArray(r.names) ? r.names : []).map(kpiLabel);
+  if(!r || !Array.isArray(r.mains)) return;   // ignore an old-format saved copy; fresh data replaces it
+  kpi.mains = r.mains;
   kpi.rows = Array.isArray(r.rows) ? r.rows : [];
   kpi.isAdmin = !!r.isAdmin;
   kpi.at = at || Date.now();
