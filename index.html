@@ -642,7 +642,8 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 .kpiRow.kpiH{padding-top:0;font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:#8d9bb3;font-weight:700;}
 .kpiRow .n{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .kpiRow .v{text-align:right;}
-.kpiGrp{padding:12px 0 4px;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#43d9ff;border-bottom:1px solid rgba(121,214,255,.13);}.kpiGrp:first-child{padding-top:2px;}.kpiRow.sub .n{padding-left:10px;font-weight:500;color:#c9d6ea;}
+.kpiGrp{padding:12px 0 4px;font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#43d9ff;border-bottom:1px solid rgba(121,214,255,.13);}.kpiGrp:first-child{padding-top:2px;}.kpiRow.sub .n{padding-left:10px;font-weight:500;color:#c9d6ea;}.kpiRow.kpiHd{padding:12px 0 6px;border-bottom:1px solid rgba(121,214,255,.13);}
+.kpiRow.kpiHd .n{font-size:.66rem;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#43d9ff;white-space:normal;line-height:1.25;}
 .kpiRow .sh{color:#ff5f6d;font-weight:700;}.kpiRow .su{color:#55f7c5;font-weight:700;}.kpiRow .z{color:#8d9bb3;}
 @media(max-width:380px){.kpiHero{flex-direction:column;}.kpiSide{width:100%;}}
 @media(prefers-reduced-motion:reduce){.kpiRing .kpiPg{transition:none;}}
@@ -2272,15 +2273,15 @@ function renderKpiTile(){
     let h = '<div class="kpiTb"><div class="kpiRow kpiH"><span>KPI</span><span class="v">Target</span><span class="v">Ach.</span><span class="v">Short / Surplus</span></div>';
     kpi.mains.forEach((m, k) => {
       const d = M(k);
-      h += `<div class="kpiGrp">${esc(m.name)}</div>`;          // every main KPI gets the same heading
       if(m.subs && m.subs.length){
+        h += `<div class="kpiGrp">${esc(m.name)}</div>`;
         m.subs.forEach((sn, j) => {
           const sd = (d.s && d.s[j]) || {}, t = num(sd.t), a = num(sd.a);
           h += `<div class="kpiRow sub"><span class="n">${esc(sn)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
         });
       } else {
-        const t = num(d.t), a = num(d.a);
-        h += `<div class="kpiRow sub"><span class="n">Total</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
+        const t = num(d.t), a = num(d.a);      // no sub KPIs: the numbers sit on the heading line itself
+        h += `<div class="kpiRow kpiHd"><span class="n">${esc(m.name)}</span><span class="v">${kpiFmt(t)}</span><span class="v">${kpiFmt(a)}</span>${shortSurplus(t, a)}</div>`;
       }
     });
     body.innerHTML = h + '</div>';
