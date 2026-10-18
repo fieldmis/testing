@@ -2192,7 +2192,7 @@ function buildKmStat(containerId, km){
  * is not in the tab. Each KPI is scored as Achievement / Target, counted up to 125%, and the overall score is
  * the average of the KPIs. */
 const KPI_CAP = 1.25;
-const KPI_CACHE_KEY = 'sfos_kpi';
+const KPI_CACHE_KEY = 'sfos_kpi2';   // bumped so an older saved copy (without Overall) is not reused
 const KPI_FRESH_MS = 5 * 60 * 1000;      // re-read the sheet at most every 5 minutes
 const KPI_LABELS = {                      // heading in the sheet (lower case) -> name shown in the app
   'hx8 mlp': 'HX8 MLP',
