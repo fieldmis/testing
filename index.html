@@ -19,6 +19,10 @@
   <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <style>
+    /* Remove the square tap-highlight box Android draws while pressing buttons/tabs (ignores border-radius). Visual only: no effect on clicks, focus, scrolling or text selection. */
+    *{-webkit-tap-highlight-color:transparent;}
+    html,body,button,a,input,select,textarea,label,summary,[role="button"],[role="tab"],[onclick]{-webkit-tap-highlight-color:rgba(0,0,0,0);}
+    button:focus:not(:focus-visible),a:focus:not(:focus-visible),[role="tab"]:focus:not(:focus-visible),[onclick]:focus:not(:focus-visible){outline:none;}
     :root{
       --bg:#e6e9ef; --text:#4d5061; --muted:#8b8fa3; --danger:#e0644f;
       --accent1:#55f7c5; --accent2:#43d9ff; --accent3:#8b7cff; --below:#9aa3b5;
@@ -30,10 +34,39 @@
     body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}
     #app{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;overflow-x:hidden;}
     .screen{display:none;flex-direction:column;flex:1;padding:22px;}
-    .screen.active{display:flex;animation:screenEnterFwd .42s cubic-bezier(.16,1,.3,1);}
-    .screen.active.dir-back{animation:screenEnterBack .42s cubic-bezier(.16,1,.3,1);}
-    @keyframes screenEnterFwd{from{opacity:0;transform:translate(28px,10px) scale(.98);}to{opacity:1;transform:translate(0,0) scale(1);}}
-    @keyframes screenEnterBack{from{opacity:0;transform:translate(-28px,10px) scale(.98);}to{opacity:1;transform:translate(0,0) scale(1);}}
+    /* ONE page transition for the whole app. Forward = slides in from the right; Back = the exact mirror (from the left).
+       Transform only: no opacity, scale or blur on the screen, because cards use backdrop-filter and any fade/filter on a
+       parent makes them pop when the animation ends (that was the flicker). Change the feel here, in one place. */
+    :root{--nav-dur:.36s;--nav-ease:cubic-bezier(.16,1,.3,1);--nav-shift:32px;}
+    .screen.active{display:flex;animation:navIn var(--nav-dur) var(--nav-ease) backwards;}
+    .screen.active.dir-back{animation-name:navInBack;}
+    @keyframes navIn{from{transform:translate3d(var(--nav-shift),0,0);}to{transform:translate3d(0,0,0);}}
+    @keyframes navInBack{from{transform:translate3d(calc(var(--nav-shift) * -1),0,0);}to{transform:translate3d(0,0,0);}}
+    @media (prefers-reduced-motion:reduce){.screen.active,.screen.active.dir-back{animation:none;}}
+
+    /* ===== Tab-expand transition (dashboard tab <-> its page). Approved spring sample, ported. =====
+       Only transform/opacity move; no blur/clip-path/backdrop-filter on anything animating; text is never scaled. */
+    :root{--fx-spring:cubic-bezier(.34,1.3,.5,1);--fx-spring2:cubic-bezier(.3,1.6,.5,1);--fx-ease:cubic-bezier(.4,0,.2,1);}
+    .screen.active.fx{animation:none;}                       /* the page uses the tab-expand motion instead of the slide */
+    html.fx-lock{overflow:hidden;}
+    #fxLayer{position:fixed;inset:0;z-index:45;visibility:hidden;pointer-events:none;}
+    #fxLayer.on{visibility:visible;pointer-events:auto;}      /* also swallows stray taps while animating */
+    #fxBg{position:absolute;inset:0;overflow:hidden;transform-origin:0 0;
+      transform:translate(var(--tx,0px),var(--ty,0px)) scale(var(--sx,1),var(--sy,1));border-radius:var(--br,0);
+      transition:transform .42s var(--fx-ease),border-radius .2s ease .22s;will-change:transform;}
+    #fxLayer.open #fxBg{transform:none;border-radius:0;transition:transform .62s var(--fx-spring),border-radius .2s ease-out;}
+    #fxLayer.instant,#fxLayer.instant *{transition:none!important;}
+    /* dashboard blocks: above the tab pushed up, below pushed down, then spring back */
+    #screen-dashboard.fx-live>*{will-change:transform;transition:transform .42s var(--fx-ease)!important;}
+    #screen-dashboard.fx-out>*{transform:translate3d(0,var(--push,0px),0)!important;transition:transform .62s var(--fx-spring)!important;}
+    #screen-dashboard.fx-instant>*{transition:none!important;}
+    #screen-dashboard>.fx-src{visibility:hidden;}
+    /* page content bounces in once the page has filled the screen */
+    .screen.fx-in>*{animation:fxRise .75s var(--fx-spring2) backwards;animation-delay:calc(var(--i,0) * 45ms + 60ms);}
+    @keyframes fxRise{from{opacity:0;transform:translate3d(0,46px,0);}to{opacity:1;transform:none;}}
+    /* fixed/sticky bars (Visit form Back/Clear/Next) keep their own position/transform: opacity-only entrance */
+    .screen.fx-in>.fx-still{animation:fxFade .4s ease .25s backwards;}
+    @keyframes fxFade{from{opacity:0;}to{opacity:1;}}
     h1{font-size:1.25rem;margin:0 0 18px;font-weight:700;color:var(--text);}
     .loginBrand{display:block;width:104px;height:104px;object-fit:contain;margin:2px auto 12px;}
     .docsEmpty{text-align:center;padding:26px 12px;color:var(--muted);font-size:.9rem;}
@@ -240,7 +273,6 @@ body::after{content:"";position:fixed;width:280px;height:280px;border-radius:50%
 #app{position:relative;z-index:1;max-width:500px;padding:0 2px;}
 .screen{padding:20px 18px;position:relative;}
 .screen::before{content:"";position:absolute;top:0;left:14%;right:14%;height:1px;background:linear-gradient(90deg,transparent,var(--accent3),transparent);opacity:.55;}
-.screen.active{animation:screenEnterFwd .55s cubic-bezier(.16,1,.3,1);}
 .card,.formCard{background:linear-gradient(145deg,rgba(24,35,54,.88),rgba(10,16,28,.78));border:1px solid var(--line);box-shadow:0 20px 45px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.045);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}
 .card{overflow:hidden;}
 .card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(120deg,rgba(255,255,255,.06),transparent 28%,transparent 72%,rgba(67,217,255,.025));}
@@ -299,8 +331,6 @@ input[type=text]:focus,input[type=password]:focus,.pjpUpdateBox textarea:focus{o
 body{min-height:100dvh;letter-spacing:.01em}
 #app{min-height:100dvh}
 .screen{min-height:100dvh;padding:18px 18px 30px;gap:0}
-.screen.active{animation:surfaceIn .48s cubic-bezier(.16,1,.3,1)}
-@keyframes surfaceIn{from{opacity:0;transform:translateY(16px) scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
 .screen::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% -10%,rgba(67,217,255,.07),transparent 34%)}
 .screen>h1{position:relative;z-index:2;display:flex;align-items:center;gap:10px;padding:8px 4px 16px;margin:0 0 12px;font-size:1.18rem}
 .screen>h1::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--neon);box-shadow:0 0 12px var(--neon);animation:statusBlink 1.8s infinite}
@@ -650,10 +680,8 @@ label.vfOpt.checked{border-color:rgba(67,217,255,.75);background:rgba(67,217,255
 .dashTabs button.on{color:#06101c;background:linear-gradient(135deg,#55f7c5,#43d9ff);}
 .dashPage .statGrid{margin-bottom:0;}
 .dashPage .kpiTile{margin-bottom:0;}
-.dashPage.slideL{animation:dashInL .28s cubic-bezier(.16,1,.3,1);}
-.dashPage.slideR{animation:dashInR .28s cubic-bezier(.16,1,.3,1);}
-@keyframes dashInL{from{opacity:0;transform:translateX(28px);}to{opacity:1;transform:none;}}
-@keyframes dashInR{from{opacity:0;transform:translateX(-28px);}to{opacity:1;transform:none;}}
+.dashPage.slideL{animation:navIn var(--nav-dur) var(--nav-ease) backwards;}
+.dashPage.slideR{animation:navInBack var(--nav-dur) var(--nav-ease) backwards;}
 @media (prefers-reduced-motion:reduce){.dashPage.slideL,.dashPage.slideR{animation:none;}}
 </style>
   <style id="docViewerStyles">
@@ -982,13 +1010,155 @@ document.getElementById('installBtn').addEventListener('click', async ()=>{
   deferredInstallPrompt = null;
 });
 
+/* ---- Tab-expand transition ----
+ * Tapping Visit Report / Workshop Master / Summary / Document Vault on the dashboard: the tab's own rectangle grows to
+ * full screen (dashboard blocks pushed away), the real page then appears with a small bounce. Back reverses it into the
+ * same tab. Everything else keeps the normal slide. The real screen change is only DELAYED (never skipped), so all
+ * existing page logic still runs exactly as before. */
+const NavFX = (function(){
+  const PAGES = {'screen-visitreport':1,'screen-mastersearch':1,'screen-summary':1,'screen-docslocker':1};
+  const reduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const root = document.documentElement;
+  const dash = () => document.getElementById('screen-dashboard');
+  let layer=null, bg=null, tab=null, tabAt=0, src=null, srcId='', savedY=0, busy=false, swapFn=null, timers=[];
+  const later = (fn, ms) => { timers.push(setTimeout(fn, ms)); };
+
+  /* real damped springs as CSS linear() curves (page fill ~10% overshoot, content bounce ~16%) */
+  (function(){
+    try{
+      if(!(window.CSS && CSS.supports('animation-timing-function','linear(0,1)'))) return;
+      const make=(z,D)=>{const w0=(4.2/D)/z, wd=w0*Math.sqrt(1-z*z), N=44, p=[];
+        for(let i=0;i<=N;i++){const t=D*i/N; p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
+        return 'linear('+p.join(',')+')';};
+      root.style.setProperty('--fx-spring', make(.6,.62));
+      root.style.setProperty('--fx-spring2', make(.5,.75));
+    }catch(e){}
+  })();
+
+  /* remember which dashboard tab was tapped (capture phase: runs before the tab's own onclick) */
+  document.addEventListener('click', e=>{
+    const b = e.target.closest && e.target.closest('#screen-dashboard > .btn');
+    if(b && b.id!=='startDayBtn' && !b.classList.contains('danger')){ tab = b; tabAt = Date.now(); }
+  }, true);
+
+  function ensure(){
+    if(layer) return;
+    layer = document.createElement('div'); layer.id = 'fxLayer';
+    bg = document.createElement('div'); bg.id = 'fxBg';
+    layer.appendChild(bg); document.body.appendChild(layer);
+  }
+  function paint(el){                                   // the page layer takes the tapped tab's colour
+    const cs = getComputedStyle(el);
+    bg.style.backgroundImage = cs.backgroundImage;
+    bg.style.backgroundColor = cs.backgroundColor;
+  }
+  function place(el){                                   // park the layer exactly over the tab
+    const r = el.getBoundingClientRect(), sx = r.width/innerWidth, sy = r.height/innerHeight, st = bg.style;
+    const rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 18;
+    st.setProperty('--tx', r.left+'px'); st.setProperty('--ty', r.top+'px');
+    st.setProperty('--sx', sx); st.setProperty('--sy', sy);
+    st.setProperty('--br', (rad/sx)+'px / '+(rad/sy)+'px');   // counter-scaled so corners look round
+  }
+  function setPush(el){                                 // blocks above go up, blocks below go down, by the distance the tab's edges travel
+    const r = el.getBoundingClientRect(), mid = r.top + r.height/2;
+    [...dash().children].forEach(c=>{
+      if(c === el) return c.style.setProperty('--push','0px');
+      const e = c.getBoundingClientRect(); if(!e.height) return;
+      c.style.setProperty('--push', ((e.top + e.height/2 < mid) ? (-r.top-4) : (innerHeight - r.bottom + 4)) + 'px');
+    });
+  }
+  function reset(){
+    timers.forEach(clearTimeout); timers = [];
+    const d = dash();
+    if(d) d.classList.remove('fx-live','fx-out','fx-instant');
+    if(src) src.classList.remove('fx-src');
+    if(layer){ layer.classList.remove('on','open','instant'); layer.style.opacity=''; layer.style.transition=''; }
+    root.classList.remove('fx-lock');
+    busy = false; swapFn = null;
+  }
+  function flush(){                                     // finish instantly (e.g. Android Back pressed mid-animation)
+    if(!busy) return;
+    const f = swapFn; swapFn = null;
+    timers.forEach(clearTimeout); timers = [];
+    if(f) f();
+    reset();
+  }
+  function plan(id, direction){
+    if(busy) flush();
+    if(reduce && reduce.matches) return null;
+    const a = document.querySelector('.screen.active'); if(!a) return null;
+    if(direction !== 'back' && a.id === 'screen-dashboard' && PAGES[id] && tab && tab.isConnected && tab.offsetParent && Date.now()-tabAt < 1000){
+      const t = tab; tab = null; return {kind:'open', id:id, tab:t};
+    }
+    if(direction === 'back' && id === 'screen-dashboard' && PAGES[a.id] && src && src.isConnected && a.id === srcId) return {kind:'close'};
+    return null;
+  }
+  function rise(el){                                    // page content springs in after the page fills
+    [...el.children].forEach((c,i)=>{
+      const pos = getComputedStyle(c).position;
+      if(pos === 'fixed' || pos === 'sticky') c.classList.add('fx-still');
+      else c.style.setProperty('--i', Math.min(i,8));
+    });
+    el.classList.add('fx-in');
+    setTimeout(()=>el.classList.remove('fx-in'), 1300);
+  }
+  function open(fx, swap){
+    busy = true; swapFn = swap; src = fx.tab; srcId = fx.id; savedY = window.scrollY || 0;
+    ensure(); const d = dash();
+    paint(src);
+    layer.classList.add('on','instant'); root.classList.add('fx-lock');
+    place(src); setPush(src); src.classList.add('fx-src'); d.classList.add('fx-live');
+    d.offsetHeight; layer.classList.remove('instant'); d.offsetHeight;      // commit the start state, then animate
+    layer.classList.add('open'); d.classList.add('fx-out');
+    later(()=>{
+      d.classList.add('fx-instant'); d.classList.remove('fx-out','fx-live'); src.classList.remove('fx-src');
+      const f = swapFn; swapFn = null; if(f) f();                            // real screen change: dashboard hides, page shows
+      window.scrollTo(0,0);
+      layer.style.transition = 'opacity .32s ease .04s'; layer.style.opacity = '0';
+      later(reset, 420);
+    }, 340);
+    later(flush, 2200);                                                      // watchdog: never leave the layer stuck
+  }
+  function close(swap){
+    busy = true; swapFn = swap;
+    ensure(); paint(src);
+    layer.classList.add('on','open','instant'); root.classList.add('fx-lock');
+    layer.style.opacity = '0'; layer.offsetHeight;
+    layer.classList.remove('instant'); layer.style.transition = 'opacity .16s ease'; layer.offsetHeight;
+    layer.style.opacity = '1';
+    later(()=>{
+      const f = swapFn; swapFn = null; if(f) f();                            // dashboard shows (hidden behind the layer)
+      window.scrollTo(0, savedY);
+      const d = dash();
+      setPush(src);
+      d.classList.add('fx-instant','fx-live','fx-out'); src.classList.add('fx-src');
+      d.offsetHeight; d.classList.remove('fx-instant');
+      layer.style.transition = '';
+      place(src); layer.classList.remove('open'); d.classList.remove('fx-out');   // layer shrinks into the tab, blocks spring back
+      later(reset, 480);
+    }, 180);
+    later(flush, 2200);
+  }
+  return {
+    plan: plan, flush: flush, rise: rise,
+    start: function(fx, swap){ (fx.kind === 'open' ? open : close)(fx, swap); }
+  };
+})();
+
 /* ---- Navigation ---- */
 function renderScreen(id, direction){
+  const fx = NavFX.plan(id, direction);
+  if(fx){ NavFX.start(fx, ()=>doRenderScreen(id, direction, fx.kind)); return; }
+  doRenderScreen(id, direction, null);
+}
+function doRenderScreen(id, direction, fxKind){
   if(id !== 'screen-docviewer' && window.DocViewerAPI) window.DocViewerAPI.close();   // frees the open picture / PDF
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active','dir-back'));
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active','dir-back','fx','fx-in'));
   const el = document.getElementById(id);
   if(direction==='back') el.classList.add('dir-back');
+  if(fxKind) el.classList.add('fx');
   el.classList.add('active');
+  if(fxKind === 'open') NavFX.rise(el);
   if(session && id!=='screen-login') lsSet('sfos_screen', id); // for reload restore
   if(id==='screen-visitreport') VisitForm.reset();
   if(id==='screen-dashboard' && session){ loadDashboardStats(); loadKpi(); prefetchDocs(); }
@@ -1066,6 +1236,7 @@ function flushHistoryRepair(){
 ['pointerup','click','touchend','keydown'].forEach(t=>document.addEventListener(t, flushHistoryRepair, true));
 
 window.addEventListener('popstate', (e)=>{
+  NavFX.flush();   // Back pressed mid-animation: finish it instantly, then handle Back normally
   // Beat plan not yet confirmed/updated: stay on the PJP screen.
   if(pjpPending && session && document.getElementById('screen-pjp').classList.contains('active')){
     if(!(e.state && e.state.screen === 'screen-pjp')){
@@ -4349,7 +4520,7 @@ if(session && session.date === todayStr()){
 <script>
 (function(){
  document.addEventListener('click',function(e){const b=e.target.closest('.btn,.heroCameraBtn,#captureBtn,.backBtn');if(!b||b.disabled)return;const r=b.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top;const q=document.createElement('i');q.className='uiRipple';q.style.left=x+'px';q.style.top=y+'px';b.appendChild(q);setTimeout(()=>q.remove(),650)},{passive:true});
- const st=document.createElement('style');st.textContent='.uiRipple{position:absolute;width:12px;height:12px;border-radius:50%;pointer-events:none;background:rgba(120,225,255,.3);transform:translate(-50%,-50%) scale(1);animation:uiRipple .62s ease-out forwards;z-index:20}@keyframes uiRipple{to{transform:translate(-50%,-50%) scale(22);opacity:0}}.screen.active .card{animation:cardReveal .42s cubic-bezier(.16,1,.3,1) both}@keyframes cardReveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}';document.head.appendChild(st);
+ const st=document.createElement('style');st.textContent='.uiRipple{position:absolute;width:12px;height:12px;border-radius:50%;pointer-events:none;background:rgba(120,225,255,.3);transform:translate(-50%,-50%) scale(1);animation:uiRipple .62s ease-out forwards;z-index:20}@keyframes uiRipple{to{transform:translate(-50%,-50%) scale(22);opacity:0}}';document.head.appendChild(st);
 })();
 </script>
   <script>
@@ -4361,309 +4532,5 @@ if(session && session.date === todayStr()){
       });
     }
   </script>
-<style id="fmTheme">
-/* ===== FIELDMIS THEME + MOTION LAYER (additive; overrides only, no renamed hooks) ===== */
-:root{
-  --fm-spring:cubic-bezier(.34,1.3,.5,1);--fm-spring2:cubic-bezier(.3,1.6,.5,1);--fm-ease:cubic-bezier(.4,0,.2,1);
-  --fm-ok:#2ee6a0;--fm-warn:#ffb86b;--fm-err:#ff6675;--fm-line:rgba(121,214,255,.16);
-  --fm-surface:linear-gradient(145deg,#121d31,#0b1322);
-  --fm-card-shadow:0 14px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05);
-  --pg1:#55f7c5;--pg2:#43d9ff;--pg-rgb:67,217,255;
-}
-/* one motion owner: the old slide-in is replaced by the lifecycle in the script below */
-.screen.active,.screen.active.dir-back{animation:none!important}
-
-/* per-page theme inherited from the action that opens it */
-#screen-visitreport,#screen-pjp{--pg1:#55f7c5;--pg2:#43d9ff;--pg-rgb:85,247,197}
-#screen-mastersearch,#screen-exceltool{--pg1:#43d9ff;--pg2:#8b7cff;--pg-rgb:67,160,255}
-#screen-summary{--pg1:#8b7cff;--pg2:#c06cff;--pg-rgb:139,124,255}
-#screen-docslocker,#screen-docviewer{--pg1:#ffb86b;--pg2:#ff7a8a;--pg-rgb:255,150,120}
-#screen-dayend{--pg1:#ff8a75;--pg2:#d93856;--pg-rgb:255,102,117}
-
-/* dashboard action buttons match their destination page (vars set per button by script) */
-#app #screen-dashboard>.btn.btn[data-fm]{background:linear-gradient(135deg,var(--b1),var(--b2))!important;color:#06101c!important;
-  border:1px solid rgba(255,255,255,.28)!important;
-  box-shadow:0 12px 26px rgba(var(--b-rgb),.28),inset 0 1px 0 rgba(255,255,255,.38),inset 0 -2px 6px rgba(0,0,0,.12)!important}
-
-/* tiles / cards: refined gradient surface, fine border, controlled depth */
-.screen:not(#screen-login)>.card:not(.heroTile),.statGrid>.card{background:var(--fm-surface);border:1px solid var(--fm-line);box-shadow:var(--fm-card-shadow)}
-.chartTitle,.kpiTitle,.vfSectionTitle{color:#43d9ff}
-.chartTitle{letter-spacing:.05em}
-.btn{transition:transform .35s var(--fm-spring),box-shadow .2s,filter .2s,opacity .2s}
-.btn:active:not(:disabled){transform:scale(.97)}
-.btn:disabled,.btn[disabled]{opacity:.5;cursor:not-allowed}
-:focus-visible{outline:2px solid #43d9ff;outline-offset:2px}
-
-/* visit form controls */
-select.vfSelect,.vfFieldWrap input[type=text],.vfFieldWrap textarea{min-height:48px;border-radius:14px;transition:border-color .2s,box-shadow .35s var(--fm-spring)}
-select.vfSelect:focus,.vfFieldWrap input[type=text]:focus,.vfFieldWrap textarea:focus{border-color:#55f7c5!important;box-shadow:0 0 0 3px rgba(85,247,197,.22)!important;outline:none}
-label.vfOpt{min-height:48px;transition:transform .35s var(--fm-spring),border-color .2s,background .2s,box-shadow .25s}
-label.vfOpt:active{transform:scale(.98)}
-label.vfOpt.checked{border-color:#55f7c5!important;background:linear-gradient(135deg,rgba(85,247,197,.16),rgba(67,217,255,.08))!important;
-  box-shadow:0 0 0 1px rgba(85,247,197,.4),0 8px 18px rgba(0,0,0,.25)!important}
-label.vfOpt input{accent-color:#55f7c5}
-.vfFieldWrap.invalid{animation:fmShake .4s var(--fm-ease)}
-@keyframes fmShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
-.sharePrompt .card{animation:fmPop .5s var(--fm-spring2)}
-@keyframes fmPop{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
-
-/* geotag camera */
-.camControls{background:linear-gradient(180deg,#121d31,#0a0f1a)!important;border-top:1px solid rgba(85,247,197,.25);
-  padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))}
-#captureBtn{box-shadow:0 0 0 4px #0a0f1a,0 0 0 7px rgba(85,247,197,.55),0 10px 22px rgba(0,0,0,.45)!important;border:0!important;
-  transition:transform .35s var(--fm-spring)}
-#captureBtn::after{box-shadow:inset 0 2px 4px rgba(255,255,255,.4),0 4px 12px rgba(67,217,255,.35);transition:inset .25s var(--fm-spring)}
-.stampPreview{border:1px solid rgba(67,217,255,.3);box-shadow:0 10px 26px rgba(0,0,0,.4)}
-.stampMapBox{border:1px solid rgba(255,255,255,.18)}
-
-
-/* six-box PIN */
-#loginPin{position:absolute!important;width:1px!important;height:1px!important;opacity:0;pointer-events:none;margin:0!important;padding:0!important;overflow:hidden}
-.fmPin{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(6px,2.2vw,10px);margin:0 0 17px}
-#screen-login .fmPin input{width:100%;min-width:0;height:54px;padding:0;margin:0;text-align:center;font-size:1.35rem;font-weight:700;
-  border-radius:14px;background:rgba(3,9,17,.78);border:1.5px solid rgba(121,214,255,.2);color:#f4f8ff;caret-color:#43d9ff;outline:none;
-  box-shadow:inset 0 3px 8px rgba(0,0,0,.3);transition:border-color .2s,box-shadow .35s var(--fm-spring),transform .35s var(--fm-spring)}
-#screen-login .fmPin input.filled{border-color:rgba(67,217,255,.5)}
-#screen-login .fmPin input:focus{border-color:#43d9ff;box-shadow:0 0 0 3px rgba(67,217,255,.18);transform:translateY(-2px) scale(1.04)}
-#screen-login .fmPin.complete input{border-color:var(--fm-ok);box-shadow:0 0 0 2px rgba(46,230,160,.14),inset 0 3px 8px rgba(0,0,0,.3)}
-#screen-login .fmPin.err input{border-color:var(--fm-err);box-shadow:0 0 0 2px rgba(255,102,117,.16),inset 0 3px 8px rgba(0,0,0,.3)}
-.fmPin.shake{animation:fmShake .4s var(--fm-ease)}
-#screen-login #loginBtn:disabled{opacity:.42;filter:saturate(.5);cursor:not-allowed}
-
-@media (prefers-reduced-motion:reduce){#fmSheet,#fmBase{display:none!important}.sharePrompt .card,.vfFieldWrap.invalid,.fmPin.shake{animation:none}}
-
-/* ===== page = the button's colour; layered so nothing can overlap or intercept taps =====
-   z-order: base(10) < outgoing-under(20) < sheet(30) < live page & outgoing-over(40) */
-#fmBase,#fmSheet{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;display:none;pointer-events:none;transform-origin:0 0}
-#fmBase{z-index:10}
-#fmSheet{z-index:30;will-change:transform,opacity}
-.screen.fm-ghost{display:flex!important;position:fixed!important;margin:0!important;pointer-events:none!important;overflow:hidden;max-width:none!important}
-.screen.fm-under{z-index:20!important}
-.screen.fm-over{z-index:40!important}
-.fm-src{visibility:hidden!important}
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend){position:relative;z-index:40;background:none;color:#06101c}
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) h1{color:#06101c;background:none;-webkit-text-fill-color:#06101c;text-shadow:none}
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .backBtn{background:rgba(6,16,28,.16)!important;color:#06101c!important;border:0!important;box-shadow:none!important;
-  padding:9px 16px!important;border-radius:12px!important;align-self:flex-start}
-/* controls sitting directly on the coloured page use the dark "ink" (as in the reference sample) */
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.btn.primary,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.pjpActions .btn,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .pjpUpdateBox .btn,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.btn.primary:hover{background:#08111d!important;color:#eaf3ff!important;
-  border:1px solid rgba(255,255,255,.22)!important;box-shadow:0 10px 22px rgba(6,16,28,.35)!important}
-/* controls inside dark panels carry the page gradient */
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .card .btn.primary,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .vfNavBar #vfBtnNext{background:linear-gradient(135deg,var(--pg1),var(--pg2))!important;color:#06101c!important;
-  border:1px solid rgba(255,255,255,.3)!important;box-shadow:0 10px 22px rgba(var(--pg-rgb),.3),inset 0 1px 0 rgba(255,255,255,.35)!important}
-#app #screen-pjp .pjpActions{background:none!important}
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .docLink{background:linear-gradient(145deg,#1a2740,#0c1424)!important;color:#eaf3ff!important;border:1px solid var(--fm-line)!important;box-shadow:0 10px 22px rgba(0,0,0,.3)!important}
-#vfCard{background:var(--fm-surface);border:1px solid var(--fm-line);border-radius:22px;padding:18px;box-shadow:var(--fm-card-shadow)}
-#vfCard:empty{display:none}
-/* dark panels keep light text even though the page itself uses dark ink */
-#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .card,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) #vfCard,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .pjpUpdateBox,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .vfNavBar,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) #searchResults{color:var(--text)}
-</style>
-<script id="fmMotion">
-/* ===== FIELDMIS THEME + MOTION LAYER: wraps renderScreen/doLogin only; business logic untouched ===== */
-(function(){
-'use strict';
-const $=id=>document.getElementById(id);
-
-/* ---- real damped springs (same maths as the reference sample) ---- */
-let SPR='cubic-bezier(.34,1.3,.5,1)',SPR2='cubic-bezier(.3,1.6,.5,1)';const EASE='cubic-bezier(.4,0,.2,1)';
-try{ if(CSS.supports('animation-timing-function','linear(0,1)')){
-  const mk=(z,D)=>{const w0=(4.2/D)/z,wd=w0*Math.sqrt(1-z*z),N=44,p=[];
-    for(let i=0;i<=N;i++){const t=D*i/N;p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
-    return 'linear('+p.join(',')+')';};
-  SPR=mk(.6,.62);SPR2=mk(.5,.75);
-}}catch(e){}
-
-/* ---- six-digit PIN UI (writes into the original #loginPin so doLogin is unchanged) ---- */
-const real=$('loginPin'),btn=$('loginBtn'),msg=$('loginMsg'),N=6;
-const bx=[];let wrap=null;
-function val(){return bx.map(b=>b.value).join('');}
-function full(){return /^\d{6}$/.test(val());}
-function loading(){return btn.dataset.origHtml!==undefined&&btn.innerHTML!==btn.dataset.origHtml;}
-function render(){
-  wrap.classList.toggle('complete',full());
-  bx.forEach(b=>b.classList.toggle('filled',!!b.value));
-  const want=loading()?true:!full(); if(btn.disabled!==want) btn.disabled=want;
-}
-function setReal(){real.value=val();wrap.classList.remove('err');}
-function fill(d){bx.forEach((b,i)=>b.value=d[i]||'');real.value=val();render();}
-function resyncPin(){ if(!wrap) return; fill(String(real.value||'').replace(/\D/g,'').slice(0,N)); wrap.classList.remove('err'); }
-function spread(start,d){
-  for(let k=0;k<d.length&&start+k<N;k++) bx[start+k].value=d[k];
-  bx[Math.min(start+d.length,N-1)].focus(); setReal(); render();
-}
-if(real&&btn&&msg){
-  wrap=document.createElement('div');wrap.className='fmPin';wrap.setAttribute('role','group');wrap.setAttribute('aria-label','6-digit PIN');
-  for(let i=0;i<N;i++){
-    const b=document.createElement('input');b.type='password';b.inputMode='numeric';b.pattern='[0-9]*';b.maxLength=1;b.autocomplete='off';
-    b.setAttribute('aria-label','PIN digit '+(i+1)+' of '+N);bx.push(b);wrap.appendChild(b);
-    b.addEventListener('focus',()=>b.select());
-    b.addEventListener('input',()=>{
-      const d=b.value.replace(/\D/g,'');
-      if(d.length>1){spread(i,d);return;}
-      b.value=d; setReal(); if(d&&i<N-1) bx[i+1].focus(); render();
-    });
-    b.addEventListener('keydown',e=>{
-      if(e.key==='Backspace'){
-        if(!b.value&&i>0){e.preventDefault();bx[i-1].value='';bx[i-1].focus();setReal();render();}
-        else setTimeout(()=>{setReal();render();},0);
-      }else if(e.key==='ArrowLeft'&&i>0){e.preventDefault();bx[i-1].focus();}
-      else if(e.key==='ArrowRight'&&i<N-1){e.preventDefault();bx[i+1].focus();}
-      else if(e.key==='Enter'&&full()&&!btn.disabled){e.preventDefault();btn.click();}
-    });
-    b.addEventListener('paste',e=>{
-      const t=((e.clipboardData||window.clipboardData).getData('text')||'').replace(/\D/g,'');
-      e.preventDefault(); if(!t) return;
-      spread(t.length>=N?0:i,t.slice(0,N));
-    });
-  }
-  real.parentNode.insertBefore(wrap,real.nextSibling);
-  real.tabIndex=-1;real.setAttribute('aria-hidden','true');
-  real.addEventListener('input',resyncPin);real.addEventListener('change',resyncPin);
-  new MutationObserver(render).observe(btn,{attributes:true,attributeFilter:['disabled']});
-  new MutationObserver(()=>{
-    const t=msg.textContent.trim(),bad=!!t&&full()&&!/^Enter User ID/i.test(t);
-    wrap.classList.toggle('err',bad);
-    if(bad){wrap.classList.remove('shake');void wrap.offsetWidth;wrap.classList.add('shake');}
-  }).observe(msg,{childList:true,characterData:true,subtree:true});
-  const dl=window.doLogin;     /* never submit an incomplete PIN or a second request while one is running */
-  if(typeof dl==='function') window.doLogin=function(){ if(!full()||btn.disabled||loading()) return; return dl.apply(this,arguments); };
-  resyncPin();
-}
-
-/* ---- theme map: each page inherits the colours of the action that opens it ---- */
-const T={'screen-visitreport':['#55f7c5','#43d9ff','85,247,197'],'screen-mastersearch':['#43d9ff','#8b7cff','67,160,255'],
-  'screen-exceltool':['#43d9ff','#8b7cff','67,160,255'],'screen-summary':['#8b7cff','#c06cff','139,124,255'],
-  'screen-docslocker':['#ffb86b','#ff7a8a','255,150,120'],'screen-dayend':['#ff8a75','#d93856','255,102,117'],
-  'screen-pjp':['#55f7c5','#43d9ff','85,247,197']};
-const themeOf=id=>T[id]||null;
-function tag(){
-  const d=$('screen-dashboard'); if(!d) return;
-  d.querySelectorAll(':scope>.btn').forEach(b=>{
-    const oc=b.getAttribute('onclick')||'';let id=null;
-    if(b.id==='visitReportBtn')id='screen-visitreport';
-    else if(/mastersearch/.test(oc))id='screen-mastersearch';
-    else if(/openSummary/.test(oc))id='screen-summary';
-    else if(/openDocsLocker/.test(oc))id='screen-docslocker';
-    if(!id) return; const t=T[id];
-    b.dataset.fm=id;b.style.setProperty('--b1',t[0]);b.style.setProperty('--b2',t[1]);b.style.setProperty('--b-rgb',t[2]);
-  });
-}
-
-/* ---- layers ---- */
-const mk=id=>{const d=document.createElement('div');d.id=id;d.setAttribute('aria-hidden','true');($('app')||document.body).appendChild(d);return d;};
-const base=mk('fmBase'),sheet=mk('fmSheet');
-const grad=th=>`linear-gradient(135deg,${th[0]},${th[1]})`;
-function setBase(th){ if(th){base.style.background=grad(th);base.style.display='block';} else base.style.display='none'; }
-
-/* ---- one predictable lifecycle: abort() -> orig screen switch -> one transition -> settle() ---- */
-const RM=matchMedia('(prefers-reduced-motion:reduce)');
-let tok=0,src=null,dashY=0,trail=[],anims=[],ghosts=[],hidden=[],ent=[];
-document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.btn');
-  if(b&&!b.disabled) src={el:b,rect:b.getBoundingClientRect(),t:performance.now()};},true);
-
-const A=(el,kf,o)=>{const a=el.animate(kf,o);anims.push(a);return a;};
-function ghost(el,r,layer){
-  ghosts.push({el,css:el.getAttribute('style')});
-  el.classList.add('fm-ghost','fm-'+layer);
-  el.style.left=r.left+'px';el.style.top=r.top+'px';el.style.width=r.width+'px';el.style.height=r.height+'px';
-}
-function clear(){
-  anims.forEach(a=>{try{a.cancel();}catch(e){}});anims=[];
-  ghosts.forEach(g=>{g.el.classList.remove('fm-ghost','fm-under','fm-over');
-    if(g.css===null)g.el.removeAttribute('style');else g.el.setAttribute('style',g.css);});ghosts=[];
-  hidden.forEach(h=>h.classList.remove('fm-src'));hidden=[];
-  sheet.style.display='none';
-}
-function cancelEnter(){ent.forEach(a=>{try{a.cancel();}catch(e){}});ent=[];}
-function abort(){tok++;clear();cancelEnter();}
-function settle(my,th){ if(my!==tok)return; if(th!==undefined)setBase(th); clear(); }
-function finish(my,list,th){Promise.all(list.map(a=>a.finished)).then(()=>settle(my,th)).catch(()=>{});}
-
-const visible=r=>r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight;
-function geo(r){const sx=Math.max(r.width/innerWidth,.001),sy=Math.max(r.height/innerHeight,.001);
-  return{t:`translate(${r.left}px,${r.top}px) scale(${sx},${sy})`,br:`${18/sx}px / ${18/sy}px`};}
-function showSheet(th){sheet.style.background=grad(th);sheet.style.display='block';}
-/* blocks above the tile move up, blocks below move down, by exactly the distance the tile's edges travel */
-function kids(scr,tile,r){
-  const mid=r.top+r.height/2,out=[];
-  [...scr.children].forEach(c=>{
-    if(c===tile||getComputedStyle(c).display==='none'||getComputedStyle(c).position==='fixed')return;
-    if(c.contains(tile)){out.push({c,y:0,fade:true});return;}
-    const e=c.getBoundingClientRect();
-    out.push({c,y:(e.top+e.height/2<mid)?-(r.top+4):innerHeight-r.bottom+4});
-  });
-  return out;
-}
-function enter(scr,delay){                    /* subtle vertical entry, staggered; fill:'backwards' leaves nothing behind */
-  cancelEnter();
-  [...scr.children].filter(k=>getComputedStyle(k).display!=='none').slice(0,9).forEach((k,i)=>{
-    const fx=getComputedStyle(k).position==='fixed';   /* fixed bars keep their own centring transform: fade only */
-    ent.push(k.animate(fx?[{opacity:0},{opacity:1}]:[{opacity:0,transform:'translateY(24px)'},{opacity:1,transform:'none'}],
-      {duration:fx?300:700,delay:delay+i*45,easing:fx?'ease-out':SPR2,fill:'backwards'}));});
-}
-
-function forward(pe,pr,id,th,f,my){
-  const tile=f.el,r=f.rect,g=geo(r),fin=[];
-  trail.push({from:pe.id,to:id,el:tile});if(trail.length>12)trail.shift();
-  ghost(pe,pr,'under'); tile.classList.add('fm-src');hidden.push(tile);
-  showSheet(th);
-  fin.push(A(sheet,[{transform:g.t,borderRadius:g.br},{transform:'none',borderRadius:'0px'}],{duration:640,easing:SPR,fill:'forwards'}));
-  kids(pe,tile,r).forEach(k=>fin.push(k.fade
-    ?A(k.c,[{opacity:1},{opacity:0}],{duration:240,easing:'ease-out',fill:'forwards'})
-    :A(k.c,[{transform:'none'},{transform:`translateY(${k.y}px)`}],{duration:620,easing:SPR,fill:'forwards'})));
-  enter($(id),200);
-  finish(my,fin,th);
-}
-function backward(pe,pr,id,prev,my){
-  const dest=$(id),pth=themeOf(prev),dth=themeOf(id),fin=[];
-  let ix=-1;trail.forEach((e,i)=>{if(e.from===id&&e.to===prev)ix=i;});
-  const e=ix>=0?trail[ix]:null,tile=e&&e.el.isConnected?e.el:null;
-  if(ix>=0)trail.splice(ix,1);
-  setBase(dth);
-  ghost(pe,pr,'over');                              /* outgoing content fades while the colour collapses */
-  fin.push(A(pe,[{opacity:1},{opacity:0}],{duration:150,easing:'ease-out',fill:'forwards'}));
-  if(e&&id==='screen-dashboard')window.scrollTo(0,dashY);
-  const r=tile?tile.getBoundingClientRect():null;
-  if(pth&&tile&&visible(r)){
-    const g=geo(r);tile.classList.add('fm-src');hidden.push(tile);showSheet(pth);
-    fin.push(A(sheet,[{transform:'none',borderRadius:'0px'},{transform:g.t,borderRadius:g.br}],{duration:440,easing:EASE,fill:'forwards'}));
-    kids(dest,tile,r).forEach(k=>fin.push(k.fade
-      ?A(k.c,[{opacity:0},{opacity:1}],{duration:300,delay:120,easing:'ease-out',fill:'backwards'})
-      :A(k.c,[{transform:`translateY(${k.y}px)`},{transform:'none'}],{duration:620,easing:SPR,fill:'backwards'})));
-  }else if(pth){
-    showSheet(pth);fin.push(A(sheet,[{opacity:1},{opacity:0}],{duration:260,delay:60,easing:'ease-out',fill:'forwards'}));
-    if(!dth)enter(dest,60);
-  }else enter(dest,0);
-  finish(my,fin);
-}
-function go(pe,pr,sy,prev,id,dir,f){
-  const th=themeOf(id);
-  if(RM.matches||!pe||prev===id||/camera|docviewer/.test(id+prev)){setBase(th);return;}
-  const my=++tok;
-  if(dir==='back'){backward(pe,pr,id,prev,my);return;}
-  if(prev==='screen-dashboard')dashY=sy;
-  window.scrollTo(0,0);
-  if(th&&f&&pe.contains(f.el)&&visible(f.rect)){forward(pe,pr,id,th,f,my);return;}
-  setBase(th);enter($(id),0);
-}
-const orig=window.renderScreen;
-if(typeof orig==='function') window.renderScreen=function(id,dir){
-  abort();
-  const pe=document.querySelector('.screen.active'),prev=pe&&pe.id,pr=pe&&pe.getBoundingClientRect(),sy=window.scrollY;
-  const f=src&&src.el&&(performance.now()-src.t<1500||(src.el.dataset.origHtml!==undefined&&performance.now()-src.t<20000))?src:null;src=null;
-  const r=orig.apply(this,arguments);
-  try{ tag(); if(id==='screen-login') resyncPin(); go(pe,pr,sy,prev,id,dir,f); }
-  catch(e){ abort(); setBase(themeOf(id)); console.warn('fm transition skipped',e); }
-  return r;
-};
-tag();
-{const a=document.querySelector('.screen.active'); if(a) setBase(themeOf(a.id));}
-
-/* keep the focused field clear of the on-screen keyboard */
-document.addEventListener('focusin',e=>{const t=e.target;
-  if(t.matches&&t.matches('input,textarea,select')&&t.closest('#screen-visitreport,#screen-login,#screen-mastersearch'))
-    setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:RM.matches?'auto':'smooth'});}catch(_){}},320);});
-})();
-</script>
 </body>
 </html>
