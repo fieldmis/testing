@@ -4379,11 +4379,6 @@ if(session && session.date === todayStr()){
 #screen-summary{--pg1:#8b7cff;--pg2:#c06cff;--pg-rgb:139,124,255}
 #screen-docslocker,#screen-docviewer{--pg1:#ffb86b;--pg2:#ff7a8a;--pg-rgb:255,150,120}
 #screen-dayend{--pg1:#ff8a75;--pg2:#d93856;--pg-rgb:255,102,117}
-#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend{
-  background:linear-gradient(180deg,rgba(var(--pg-rgb),.30) 0,rgba(var(--pg-rgb),.07) 230px,transparent 420px) no-repeat}
-#screen-visitreport h1,#screen-pjp h1,#screen-mastersearch h1,#screen-exceltool h1,#screen-summary h1,#screen-docslocker h1,#screen-dayend h1{
-  background:linear-gradient(90deg,var(--pg1),var(--pg2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.backBtn{align-self:flex-start;padding:9px 16px!important;border-radius:12px!important;border-color:rgba(var(--pg-rgb),.4)!important}
 
 /* dashboard action buttons match their destination page (vars set per button by script) */
 #app #screen-dashboard>.btn.btn[data-fm]{background:linear-gradient(135deg,var(--b1),var(--b2))!important;color:#06101c!important;
@@ -4421,9 +4416,6 @@ label.vfOpt input{accent-color:#55f7c5}
 .stampPreview{border:1px solid rgba(67,217,255,.3);box-shadow:0 10px 26px rgba(0,0,0,.4)}
 .stampMapBox{border:1px solid rgba(255,255,255,.18)}
 
-/* theme-transition sheet: transform/opacity only, never intercepts input */
-#fmSheet{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;z-index:60;display:none;pointer-events:none;
-  transform-origin:0 0;will-change:transform,opacity;contain:strict}
 
 /* six-box PIN */
 #loginPin{position:absolute!important;width:1px!important;height:1px!important;opacity:0;pointer-events:none;margin:0!important;padding:0!important;overflow:hidden}
@@ -4438,7 +4430,33 @@ label.vfOpt input{accent-color:#55f7c5}
 .fmPin.shake{animation:fmShake .4s var(--fm-ease)}
 #screen-login #loginBtn:disabled{opacity:.42;filter:saturate(.5);cursor:not-allowed}
 
-@media (prefers-reduced-motion:reduce){#fmSheet{display:none!important}.sharePrompt .card,.vfFieldWrap.invalid,.fmPin.shake{animation:none}}
+@media (prefers-reduced-motion:reduce){#fmSheet,#fmBase{display:none!important}.sharePrompt .card,.vfFieldWrap.invalid,.fmPin.shake{animation:none}}
+
+/* ===== page = the button's colour; layered so nothing can overlap or intercept taps =====
+   z-order: base(10) < outgoing-under(20) < sheet(30) < live page & outgoing-over(40) */
+#fmBase,#fmSheet{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;display:none;pointer-events:none;transform-origin:0 0}
+#fmBase{z-index:10}
+#fmSheet{z-index:30;will-change:transform,opacity}
+.screen.fm-ghost{display:flex!important;position:fixed!important;margin:0!important;pointer-events:none!important;overflow:hidden;max-width:none!important}
+.screen.fm-under{z-index:20!important}
+.screen.fm-over{z-index:40!important}
+.fm-src{visibility:hidden!important}
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend){position:relative;z-index:40;background:none;color:#06101c}
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) h1{color:#06101c;background:none;-webkit-text-fill-color:#06101c;text-shadow:none}
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .backBtn{background:rgba(6,16,28,.16)!important;color:#06101c!important;border:0!important;box-shadow:none!important;
+  padding:9px 16px!important;border-radius:12px!important;align-self:flex-start}
+/* controls sitting directly on the coloured page use the dark "ink" (as in the reference sample) */
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.btn.primary,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.pjpActions .btn,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .pjpUpdateBox .btn,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend)>.btn.primary:hover{background:#08111d!important;color:#eaf3ff!important;
+  border:1px solid rgba(255,255,255,.22)!important;box-shadow:0 10px 22px rgba(6,16,28,.35)!important}
+/* controls inside dark panels carry the page gradient */
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .card .btn.primary,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .vfNavBar #vfBtnNext{background:linear-gradient(135deg,var(--pg1),var(--pg2))!important;color:#06101c!important;
+  border:1px solid rgba(255,255,255,.3)!important;box-shadow:0 10px 22px rgba(var(--pg-rgb),.3),inset 0 1px 0 rgba(255,255,255,.35)!important}
+#app #screen-pjp .pjpActions{background:none!important}
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .docLink{background:linear-gradient(145deg,#1a2740,#0c1424)!important;color:#eaf3ff!important;border:1px solid var(--fm-line)!important;box-shadow:0 10px 22px rgba(0,0,0,.3)!important}
+#vfCard{background:var(--fm-surface);border:1px solid var(--fm-line);border-radius:22px;padding:18px;box-shadow:var(--fm-card-shadow)}
+#vfCard:empty{display:none}
+/* dark panels keep light text even though the page itself uses dark ink */
+#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .card,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) #vfCard,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .pjpUpdateBox,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) .vfNavBar,#app :is(#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend) #searchResults{color:var(--text)}
 </style>
 <script id="fmMotion">
 /* ===== FIELDMIS THEME + MOTION LAYER: wraps renderScreen/doLogin only; business logic untouched ===== */
@@ -4516,7 +4534,8 @@ if(real&&btn&&msg){
 const T={'screen-visitreport':['#55f7c5','#43d9ff','85,247,197'],'screen-mastersearch':['#43d9ff','#8b7cff','67,160,255'],
   'screen-exceltool':['#43d9ff','#8b7cff','67,160,255'],'screen-summary':['#8b7cff','#c06cff','139,124,255'],
   'screen-docslocker':['#ffb86b','#ff7a8a','255,150,120'],'screen-dayend':['#ff8a75','#d93856','255,102,117'],
-  'screen-pjp':['#55f7c5','#43d9ff','85,247,197'],'screen-dashboard':['#55f7c5','#43d9ff','85,247,197']};
+  'screen-pjp':['#55f7c5','#43d9ff','85,247,197']};
+const themeOf=id=>T[id]||null;
 function tag(){
   const d=$('screen-dashboard'); if(!d) return;
   d.querySelectorAll(':scope>.btn').forEach(b=>{
@@ -4530,64 +4549,115 @@ function tag(){
   });
 }
 
-/* ---- single transition lifecycle ---- */
-const sheet=document.createElement('div');sheet.id='fmSheet';sheet.setAttribute('aria-hidden','true');document.body.appendChild(sheet);
+/* ---- layers ---- */
+const mk=id=>{const d=document.createElement('div');d.id=id;d.setAttribute('aria-hidden','true');($('app')||document.body).appendChild(d);return d;};
+const base=mk('fmBase'),sheet=mk('fmSheet');
+const grad=th=>`linear-gradient(135deg,${th[0]},${th[1]})`;
+function setBase(th){ if(th){base.style.background=grad(th);base.style.display='block';} else base.style.display='none'; }
+
+/* ---- one predictable lifecycle: abort() -> orig screen switch -> one transition -> settle() ---- */
 const RM=matchMedia('(prefers-reduced-motion:reduce)');
-let tok=0,src=null,home=null,ent=[];
+let tok=0,src=null,dashY=0,trail=[],anims=[],ghosts=[],hidden=[],ent=[];
 document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.btn');
   if(b&&!b.disabled) src={el:b,rect:b.getBoundingClientRect(),t:performance.now()};},true);
 
-function endSheet(){ sheet.getAnimations().forEach(a=>a.cancel()); sheet.style.display='none'; }
-function cancelEnter(){ ent.forEach(a=>{try{a.cancel();}catch(e){}}); ent=[]; }
+const A=(el,kf,o)=>{const a=el.animate(kf,o);anims.push(a);return a;};
+function ghost(el,r,layer){
+  ghosts.push({el,css:el.getAttribute('style')});
+  el.classList.add('fm-ghost','fm-'+layer);
+  el.style.left=r.left+'px';el.style.top=r.top+'px';el.style.width=r.width+'px';el.style.height=r.height+'px';
+}
+function clear(){
+  anims.forEach(a=>{try{a.cancel();}catch(e){}});anims=[];
+  ghosts.forEach(g=>{g.el.classList.remove('fm-ghost','fm-under','fm-over');
+    if(g.css===null)g.el.removeAttribute('style');else g.el.setAttribute('style',g.css);});ghosts=[];
+  hidden.forEach(h=>h.classList.remove('fm-src'));hidden=[];
+  sheet.style.display='none';
+}
+function cancelEnter(){ent.forEach(a=>{try{a.cancel();}catch(e){}});ent=[];}
+function abort(){tok++;clear();cancelEnter();}
+function settle(my,th){ if(my!==tok)return; if(th!==undefined)setBase(th); clear(); }
+function finish(my,list,th){Promise.all(list.map(a=>a.finished)).then(()=>settle(my,th)).catch(()=>{});}
+
+const visible=r=>r.width>0&&r.height>0&&r.bottom>0&&r.top<innerHeight;
 function geo(r){const sx=Math.max(r.width/innerWidth,.001),sy=Math.max(r.height/innerHeight,.001);
   return{t:`translate(${r.left}px,${r.top}px) scale(${sx},${sy})`,br:`${18/sx}px / ${18/sy}px`};}
-function show(th){sheet.style.background=`linear-gradient(135deg,${th[0]},${th[1]})`;sheet.style.display='block';}
-function finish(my,list){Promise.all(list.map(a=>a.finished)).then(()=>{if(my===tok)endSheet();}).catch(()=>{});}
-function expand(th,r,my){
-  show(th);const g=geo(r);
-  finish(my,[
-    sheet.animate([{transform:g.t,borderRadius:g.br},{transform:'none',borderRadius:'0px'}],{duration:640,easing:SPR,fill:'forwards'}),
-    sheet.animate([{opacity:1},{opacity:0}],{duration:260,delay:300,easing:'ease-out',fill:'forwards'})]);
+function showSheet(th){sheet.style.background=grad(th);sheet.style.display='block';}
+/* blocks above the tile move up, blocks below move down, by exactly the distance the tile's edges travel */
+function kids(scr,tile,r){
+  const mid=r.top+r.height/2,out=[];
+  [...scr.children].forEach(c=>{
+    if(c===tile||getComputedStyle(c).display==='none'||getComputedStyle(c).position==='fixed')return;
+    if(c.contains(tile)){out.push({c,y:0,fade:true});return;}
+    const e=c.getBoundingClientRect();
+    out.push({c,y:(e.top+e.height/2<mid)?-(r.top+4):innerHeight-r.bottom+4});
+  });
+  return out;
 }
-function shrink(th,r,my){
-  show(th);const g=geo(r);
-  finish(my,[
-    sheet.animate([{transform:'none',borderRadius:'0px'},{transform:g.t,borderRadius:g.br}],{duration:420,easing:EASE,fill:'forwards'}),
-    sheet.animate([{opacity:0},{opacity:1,offset:.2},{opacity:1,offset:.7},{opacity:0}],{duration:420,fill:'forwards'})]);
-}
-function enter(scr,delay){            /* staggered, transform+opacity only; fill:'backwards' leaves no stale styles */
+function enter(scr,delay){                    /* subtle vertical entry, staggered; fill:'backwards' leaves nothing behind */
   cancelEnter();
-  [...scr.children].filter(k=>getComputedStyle(k).display!=='none').slice(0,9).forEach((k,i)=>
-    ent.push(k.animate([{opacity:0,transform:'translateY(22px)'},{opacity:1,transform:'none'}],
-      {duration:680,delay:delay+i*45,easing:SPR2,fill:'backwards'})));
+  [...scr.children].filter(k=>getComputedStyle(k).display!=='none').slice(0,9).forEach((k,i)=>{
+    const fx=getComputedStyle(k).position==='fixed';   /* fixed bars keep their own centring transform: fade only */
+    ent.push(k.animate(fx?[{opacity:0},{opacity:1}]:[{opacity:0,transform:'translateY(24px)'},{opacity:1,transform:'none'}],
+      {duration:fx?300:700,delay:delay+i*45,easing:fx?'ease-out':SPR2,fill:'backwards'}));});
 }
-function visible(r){return r.width>0&&r.bottom>0&&r.top<innerHeight;}
-function run(prev,id,dir){
-  endSheet();cancelEnter();
-  if(RM.matches||!prev||prev===id||id==='screen-camera'||id==='screen-docviewer') return;
-  const scr=$(id),my=++tok;
-  const fresh=src&&performance.now()-src.t<1500?src:null;src=null;
-  if(dir==='back'){
-    const th=T[prev];
-    if(th&&id==='screen-dashboard'&&home&&home.isConnected&&home.dataset.fm===prev){
-      const r=home.getBoundingClientRect(); if(visible(r)) shrink(th,r,my);
-    }
-    enter(scr,0);return;
-  }
-  const th=T[id];
-  if(fresh&&th&&visible(fresh.rect)){
-    if(prev==='screen-dashboard'&&fresh.el.dataset.fm===id) home=fresh.el;
-    expand(th,fresh.rect,my);enter(scr,200);
-  }else enter(scr,0);
+
+function forward(pe,pr,id,th,f,my){
+  const tile=f.el,r=f.rect,g=geo(r),fin=[];
+  trail.push({from:pe.id,to:id,el:tile});if(trail.length>12)trail.shift();
+  ghost(pe,pr,'under'); tile.classList.add('fm-src');hidden.push(tile);
+  showSheet(th);
+  fin.push(A(sheet,[{transform:g.t,borderRadius:g.br},{transform:'none',borderRadius:'0px'}],{duration:640,easing:SPR,fill:'forwards'}));
+  kids(pe,tile,r).forEach(k=>fin.push(k.fade
+    ?A(k.c,[{opacity:1},{opacity:0}],{duration:240,easing:'ease-out',fill:'forwards'})
+    :A(k.c,[{transform:'none'},{transform:`translateY(${k.y}px)`}],{duration:620,easing:SPR,fill:'forwards'})));
+  enter($(id),200);
+  finish(my,fin,th);
+}
+function backward(pe,pr,id,prev,my){
+  const dest=$(id),pth=themeOf(prev),dth=themeOf(id),fin=[];
+  let ix=-1;trail.forEach((e,i)=>{if(e.from===id&&e.to===prev)ix=i;});
+  const e=ix>=0?trail[ix]:null,tile=e&&e.el.isConnected?e.el:null;
+  if(ix>=0)trail.splice(ix,1);
+  setBase(dth);
+  ghost(pe,pr,'over');                              /* outgoing content fades while the colour collapses */
+  fin.push(A(pe,[{opacity:1},{opacity:0}],{duration:150,easing:'ease-out',fill:'forwards'}));
+  if(e&&id==='screen-dashboard')window.scrollTo(0,dashY);
+  const r=tile?tile.getBoundingClientRect():null;
+  if(pth&&tile&&visible(r)){
+    const g=geo(r);tile.classList.add('fm-src');hidden.push(tile);showSheet(pth);
+    fin.push(A(sheet,[{transform:'none',borderRadius:'0px'},{transform:g.t,borderRadius:g.br}],{duration:440,easing:EASE,fill:'forwards'}));
+    kids(dest,tile,r).forEach(k=>fin.push(k.fade
+      ?A(k.c,[{opacity:0},{opacity:1}],{duration:300,delay:120,easing:'ease-out',fill:'backwards'})
+      :A(k.c,[{transform:`translateY(${k.y}px)`},{transform:'none'}],{duration:620,easing:SPR,fill:'backwards'})));
+  }else if(pth){
+    showSheet(pth);fin.push(A(sheet,[{opacity:1},{opacity:0}],{duration:260,delay:60,easing:'ease-out',fill:'forwards'}));
+    if(!dth)enter(dest,60);
+  }else enter(dest,0);
+  finish(my,fin);
+}
+function go(pe,pr,sy,prev,id,dir,f){
+  const th=themeOf(id);
+  if(RM.matches||!pe||prev===id||/camera|docviewer/.test(id+prev)){setBase(th);return;}
+  const my=++tok;
+  if(dir==='back'){backward(pe,pr,id,prev,my);return;}
+  if(prev==='screen-dashboard')dashY=sy;
+  window.scrollTo(0,0);
+  if(th&&f&&pe.contains(f.el)&&visible(f.rect)){forward(pe,pr,id,th,f,my);return;}
+  setBase(th);enter($(id),0);
 }
 const orig=window.renderScreen;
 if(typeof orig==='function') window.renderScreen=function(id,dir){
-  const pe=document.querySelector('.screen.active'),prev=pe&&pe.id;
+  abort();
+  const pe=document.querySelector('.screen.active'),prev=pe&&pe.id,pr=pe&&pe.getBoundingClientRect(),sy=window.scrollY;
+  const f=src&&src.el&&(performance.now()-src.t<1500||(src.el.dataset.origHtml!==undefined&&performance.now()-src.t<20000))?src:null;src=null;
   const r=orig.apply(this,arguments);
-  try{ tag(); if(id==='screen-login') resyncPin(); run(prev,id,dir); }catch(e){ endSheet(); cancelEnter(); }
+  try{ tag(); if(id==='screen-login') resyncPin(); go(pe,pr,sy,prev,id,dir,f); }
+  catch(e){ abort(); setBase(themeOf(id)); console.warn('fm transition skipped',e); }
   return r;
 };
 tag();
+{const a=document.querySelector('.screen.active'); if(a) setBase(themeOf(a.id));}
 
 /* keep the focused field clear of the on-screen keyboard */
 document.addEventListener('focusin',e=>{const t=e.target;
