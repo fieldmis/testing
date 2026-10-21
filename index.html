@@ -3150,15 +3150,15 @@ const VisitForm = (function(){
            const v = a[2] && a[2].choice;
            if(v === "Distributor Meet") return "SUBMIT";
            const map = {
-             "New Outlet / IWS Visit":"p2",
+             "New Outlet Visit":"p2",
              "New Mechanic Visit":"p3",             
-             "Existing Outlet / IWS Visit":"p6",
+             "Existing Outlet Visit":"p6",
              "Existing Mechanic Visit":"p5"
            };
            return map[v] || "p2";
          }},
 
-    p2:{ title:"New Outlet / IWS Visit Details", ids:[3,4,5,6,7],
+    p2:{ title:"New Outlet Visit Details", ids:[3,4,5,6,7],
          conditional:{ trigger:7, showValue:"Order Collected", extraIds:[8,9] },
          branch:()=>"pFinal" },
 
@@ -3360,7 +3360,7 @@ const VisitForm = (function(){
     const page = PAGES[pageId];
     if(!validatePage(pageId, true)) return;
     const target = page.branch(answers);
-    if(target === 'SUBMIT'){ btnNext.textContent = 'Review & Submit'; return; }   // e.g. Distributor Meet: nothing more to fill
+    if(target === 'SUBMIT') return;
     history.push(pageId);
     render(target, true);
   }
@@ -3702,7 +3702,7 @@ const VisitForm = (function(){
 
     // ---- DB tagging (Question 1) ----
     const uid = (session && session.userId) ? String(session.userId).trim() : '';
-    const tagged = USER_DB_MAP[uid.toUpperCase()];
+    const tagged = USER_DB_MAP[uid];
     if(tagged && tagged.length === 1){
       Q[1].options = [{label: tagged[0], value: tagged[0]}];
       answers[1] = tagged[0];
@@ -3851,12 +3851,12 @@ const VisitForm = (function(){
   // Builds the WhatsApp caption for the visit-end selfie. The lines are
   // chosen by the Type of Visit that was picked (question 2), so answers
   // from a different branch can never leak into the caption.
-  //   New Outlet / IWS Visit  -> Outlet Name (3), Outcome (7)
+  //   New Outlet Visit        -> Outlet Name (3), Outcome (7)
   //   New Mechanic Visit      -> Mechanic Name (10), Linked Outlet (17, only
   //                              when New Enrollment), Outcome (14)
   //   Existing Mechanic Visit -> Share ID-Linked Bizom (18 & 22), Linked
   //                              Outlet (23), Outcome (24 & 25)
-  //   Existing Outlet / IWS Visit -> Bizom ID (26 & 27), Outcome (30 + 31/32)
+  //   Existing Outlet Visit   -> Bizom ID (26 & 27), Outcome (30 + 31/32)
   //   Distributor Meet        -> visit type only
   // Remarks (33) are added last whenever they were answered.
   function getCaption(){
@@ -3866,7 +3866,7 @@ const VisitForm = (function(){
     const visitType = captionAnswerText(2);
     if(visitType) lines.push(visitType);
 
-    if(visitType === 'New Outlet / IWS Visit'){
+    if(visitType === 'New Outlet Visit'){
       add('Outlet Name', captionAnswerText(3));
       add('Outcome', captionAnswerText(7));
 
@@ -3880,7 +3880,7 @@ const VisitForm = (function(){
       add('Linked Outlet', captionAnswerText(23));
       add('Outcome', captionJoin([captionAnswerText(24), captionAnswerText(25)]));
 
-    } else if(visitType === 'Existing Outlet / IWS Visit'){
+    } else if(visitType === 'Existing Outlet Visit'){
       add('Bizom ID', captionJoin([captionAnswerText(26), captionAnswerText(27)]));
       const q30 = captionAnswerText(30);
       const q31 = captionAnswerText(31);
@@ -4361,239 +4361,5 @@ if(session && session.date === todayStr()){
       });
     }
   </script>
-<style id="fmTheme">
-/* ===== FIELDMIS THEME + MOTION LAYER (additive; overrides only, no renamed hooks) ===== */
-:root{
-  --fm-spring:cubic-bezier(.34,1.3,.5,1);--fm-spring2:cubic-bezier(.3,1.6,.5,1);--fm-ease:cubic-bezier(.4,0,.2,1);
-  --fm-ok:#2ee6a0;--fm-warn:#ffb86b;--fm-err:#ff6675;--fm-line:rgba(121,214,255,.16);
-  --fm-surface:linear-gradient(145deg,#121d31,#0b1322);
-  --fm-card-shadow:0 14px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05);
-  --pg1:#55f7c5;--pg2:#43d9ff;--pg-rgb:67,217,255;
-}
-/* one motion owner: the old slide-in is replaced by the lifecycle in the script below */
-.screen.active,.screen.active.dir-back{animation:none!important}
-
-/* per-page theme inherited from the action that opens it */
-#screen-visitreport,#screen-pjp{--pg1:#55f7c5;--pg2:#43d9ff;--pg-rgb:85,247,197}
-#screen-mastersearch,#screen-exceltool{--pg1:#43d9ff;--pg2:#8b7cff;--pg-rgb:67,160,255}
-#screen-summary{--pg1:#8b7cff;--pg2:#c06cff;--pg-rgb:139,124,255}
-#screen-docslocker,#screen-docviewer{--pg1:#ffb86b;--pg2:#ff7a8a;--pg-rgb:255,150,120}
-#screen-dayend{--pg1:#ff8a75;--pg2:#d93856;--pg-rgb:255,102,117}
-#screen-visitreport,#screen-pjp,#screen-mastersearch,#screen-exceltool,#screen-summary,#screen-docslocker,#screen-dayend{
-  background:linear-gradient(180deg,rgba(var(--pg-rgb),.30) 0,rgba(var(--pg-rgb),.07) 230px,transparent 420px) no-repeat}
-#screen-visitreport h1,#screen-pjp h1,#screen-mastersearch h1,#screen-exceltool h1,#screen-summary h1,#screen-docslocker h1,#screen-dayend h1{
-  background:linear-gradient(90deg,var(--pg1),var(--pg2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.backBtn{align-self:flex-start;padding:9px 16px!important;border-radius:12px!important;border-color:rgba(var(--pg-rgb),.4)!important}
-
-/* dashboard action buttons match their destination page (vars set per button by script) */
-#app #screen-dashboard>.btn.btn[data-fm]{background:linear-gradient(135deg,var(--b1),var(--b2))!important;color:#06101c!important;
-  border:1px solid rgba(255,255,255,.28)!important;
-  box-shadow:0 12px 26px rgba(var(--b-rgb),.28),inset 0 1px 0 rgba(255,255,255,.38),inset 0 -2px 6px rgba(0,0,0,.12)!important}
-
-/* tiles / cards: refined gradient surface, fine border, controlled depth */
-.screen:not(#screen-login)>.card:not(.heroTile),.statGrid>.card{background:var(--fm-surface);border:1px solid var(--fm-line);box-shadow:var(--fm-card-shadow)}
-.chartTitle,.kpiTitle,.vfSectionTitle{color:#43d9ff}
-.chartTitle{letter-spacing:.05em}
-.btn{transition:transform .35s var(--fm-spring),box-shadow .2s,filter .2s,opacity .2s}
-.btn:active:not(:disabled){transform:scale(.97)}
-.btn:disabled,.btn[disabled]{opacity:.5;cursor:not-allowed}
-:focus-visible{outline:2px solid #43d9ff;outline-offset:2px}
-
-/* visit form controls */
-select.vfSelect,.vfFieldWrap input[type=text],.vfFieldWrap textarea{min-height:48px;border-radius:14px;transition:border-color .2s,box-shadow .35s var(--fm-spring)}
-select.vfSelect:focus,.vfFieldWrap input[type=text]:focus,.vfFieldWrap textarea:focus{border-color:#55f7c5!important;box-shadow:0 0 0 3px rgba(85,247,197,.22)!important;outline:none}
-label.vfOpt{min-height:48px;transition:transform .35s var(--fm-spring),border-color .2s,background .2s,box-shadow .25s}
-label.vfOpt:active{transform:scale(.98)}
-label.vfOpt.checked{border-color:#55f7c5!important;background:linear-gradient(135deg,rgba(85,247,197,.16),rgba(67,217,255,.08))!important;
-  box-shadow:0 0 0 1px rgba(85,247,197,.4),0 8px 18px rgba(0,0,0,.25)!important}
-label.vfOpt input{accent-color:#55f7c5}
-.vfFieldWrap.invalid{animation:fmShake .4s var(--fm-ease)}
-@keyframes fmShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(2px)}}
-.sharePrompt .card{animation:fmPop .5s var(--fm-spring2)}
-@keyframes fmPop{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:none}}
-
-/* geotag camera */
-.camControls{background:linear-gradient(180deg,#121d31,#0a0f1a)!important;border-top:1px solid rgba(85,247,197,.25);
-  padding-bottom:calc(26px + env(safe-area-inset-bottom,0px))}
-#captureBtn{box-shadow:0 0 0 4px #0a0f1a,0 0 0 7px rgba(85,247,197,.55),0 10px 22px rgba(0,0,0,.45)!important;border:0!important;
-  transition:transform .35s var(--fm-spring)}
-#captureBtn::after{box-shadow:inset 0 2px 4px rgba(255,255,255,.4),0 4px 12px rgba(67,217,255,.35);transition:inset .25s var(--fm-spring)}
-.stampPreview{border:1px solid rgba(67,217,255,.3);box-shadow:0 10px 26px rgba(0,0,0,.4)}
-.stampMapBox{border:1px solid rgba(255,255,255,.18)}
-
-/* theme-transition sheet: transform/opacity only, never intercepts input */
-#fmSheet{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100dvh;z-index:60;display:none;pointer-events:none;
-  transform-origin:0 0;will-change:transform,opacity;contain:strict}
-
-/* six-box PIN */
-#loginPin{position:absolute!important;width:1px!important;height:1px!important;opacity:0;pointer-events:none;margin:0!important;padding:0!important;overflow:hidden}
-.fmPin{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:clamp(6px,2.2vw,10px);margin:0 0 17px}
-#screen-login .fmPin input{width:100%;min-width:0;height:54px;padding:0;margin:0;text-align:center;font-size:1.35rem;font-weight:700;
-  border-radius:14px;background:rgba(3,9,17,.78);border:1.5px solid rgba(121,214,255,.2);color:#f4f8ff;caret-color:#43d9ff;outline:none;
-  box-shadow:inset 0 3px 8px rgba(0,0,0,.3);transition:border-color .2s,box-shadow .35s var(--fm-spring),transform .35s var(--fm-spring)}
-#screen-login .fmPin input.filled{border-color:rgba(67,217,255,.5)}
-#screen-login .fmPin input:focus{border-color:#43d9ff;box-shadow:0 0 0 3px rgba(67,217,255,.18);transform:translateY(-2px) scale(1.04)}
-#screen-login .fmPin.complete input{border-color:var(--fm-ok);box-shadow:0 0 0 2px rgba(46,230,160,.14),inset 0 3px 8px rgba(0,0,0,.3)}
-#screen-login .fmPin.err input{border-color:var(--fm-err);box-shadow:0 0 0 2px rgba(255,102,117,.16),inset 0 3px 8px rgba(0,0,0,.3)}
-.fmPin.shake{animation:fmShake .4s var(--fm-ease)}
-#screen-login #loginBtn:disabled{opacity:.42;filter:saturate(.5);cursor:not-allowed}
-
-@media (prefers-reduced-motion:reduce){#fmSheet{display:none!important}.sharePrompt .card,.vfFieldWrap.invalid,.fmPin.shake{animation:none}}
-</style>
-<script id="fmMotion">
-/* ===== FIELDMIS THEME + MOTION LAYER: wraps renderScreen/doLogin only; business logic untouched ===== */
-(function(){
-'use strict';
-const $=id=>document.getElementById(id);
-
-/* ---- real damped springs (same maths as the reference sample) ---- */
-let SPR='cubic-bezier(.34,1.3,.5,1)',SPR2='cubic-bezier(.3,1.6,.5,1)';const EASE='cubic-bezier(.4,0,.2,1)';
-try{ if(CSS.supports('animation-timing-function','linear(0,1)')){
-  const mk=(z,D)=>{const w0=(4.2/D)/z,wd=w0*Math.sqrt(1-z*z),N=44,p=[];
-    for(let i=0;i<=N;i++){const t=D*i/N;p.push(i===N?1:+(1-Math.exp(-z*w0*t)*(Math.cos(wd*t)+(z*w0/wd)*Math.sin(wd*t))).toFixed(4));}
-    return 'linear('+p.join(',')+')';};
-  SPR=mk(.6,.62);SPR2=mk(.5,.75);
-}}catch(e){}
-
-/* ---- six-digit PIN UI (writes into the original #loginPin so doLogin is unchanged) ---- */
-const real=$('loginPin'),btn=$('loginBtn'),msg=$('loginMsg'),N=6;
-const bx=[];let wrap=null;
-function val(){return bx.map(b=>b.value).join('');}
-function full(){return /^\d{6}$/.test(val());}
-function loading(){return btn.dataset.origHtml!==undefined&&btn.innerHTML!==btn.dataset.origHtml;}
-function render(){
-  wrap.classList.toggle('complete',full());
-  bx.forEach(b=>b.classList.toggle('filled',!!b.value));
-  const want=loading()?true:!full(); if(btn.disabled!==want) btn.disabled=want;
-}
-function setReal(){real.value=val();wrap.classList.remove('err');}
-function fill(d){bx.forEach((b,i)=>b.value=d[i]||'');real.value=val();render();}
-function resyncPin(){ if(!wrap) return; fill(String(real.value||'').replace(/\D/g,'').slice(0,N)); wrap.classList.remove('err'); }
-function spread(start,d){
-  for(let k=0;k<d.length&&start+k<N;k++) bx[start+k].value=d[k];
-  bx[Math.min(start+d.length,N-1)].focus(); setReal(); render();
-}
-if(real&&btn&&msg){
-  wrap=document.createElement('div');wrap.className='fmPin';wrap.setAttribute('role','group');wrap.setAttribute('aria-label','6-digit PIN');
-  for(let i=0;i<N;i++){
-    const b=document.createElement('input');b.type='password';b.inputMode='numeric';b.pattern='[0-9]*';b.maxLength=1;b.autocomplete='off';
-    b.setAttribute('aria-label','PIN digit '+(i+1)+' of '+N);bx.push(b);wrap.appendChild(b);
-    b.addEventListener('focus',()=>b.select());
-    b.addEventListener('input',()=>{
-      const d=b.value.replace(/\D/g,'');
-      if(d.length>1){spread(i,d);return;}
-      b.value=d; setReal(); if(d&&i<N-1) bx[i+1].focus(); render();
-    });
-    b.addEventListener('keydown',e=>{
-      if(e.key==='Backspace'){
-        if(!b.value&&i>0){e.preventDefault();bx[i-1].value='';bx[i-1].focus();setReal();render();}
-        else setTimeout(()=>{setReal();render();},0);
-      }else if(e.key==='ArrowLeft'&&i>0){e.preventDefault();bx[i-1].focus();}
-      else if(e.key==='ArrowRight'&&i<N-1){e.preventDefault();bx[i+1].focus();}
-      else if(e.key==='Enter'&&full()&&!btn.disabled){e.preventDefault();btn.click();}
-    });
-    b.addEventListener('paste',e=>{
-      const t=((e.clipboardData||window.clipboardData).getData('text')||'').replace(/\D/g,'');
-      e.preventDefault(); if(!t) return;
-      spread(t.length>=N?0:i,t.slice(0,N));
-    });
-  }
-  real.parentNode.insertBefore(wrap,real.nextSibling);
-  real.tabIndex=-1;real.setAttribute('aria-hidden','true');
-  real.addEventListener('input',resyncPin);real.addEventListener('change',resyncPin);
-  new MutationObserver(render).observe(btn,{attributes:true,attributeFilter:['disabled']});
-  new MutationObserver(()=>{
-    const t=msg.textContent.trim(),bad=!!t&&full()&&!/^Enter User ID/i.test(t);
-    wrap.classList.toggle('err',bad);
-    if(bad){wrap.classList.remove('shake');void wrap.offsetWidth;wrap.classList.add('shake');}
-  }).observe(msg,{childList:true,characterData:true,subtree:true});
-  const dl=window.doLogin;     /* never submit an incomplete PIN or a second request while one is running */
-  if(typeof dl==='function') window.doLogin=function(){ if(!full()||btn.disabled||loading()) return; return dl.apply(this,arguments); };
-  resyncPin();
-}
-
-/* ---- theme map: each page inherits the colours of the action that opens it ---- */
-const T={'screen-visitreport':['#55f7c5','#43d9ff','85,247,197'],'screen-mastersearch':['#43d9ff','#8b7cff','67,160,255'],
-  'screen-exceltool':['#43d9ff','#8b7cff','67,160,255'],'screen-summary':['#8b7cff','#c06cff','139,124,255'],
-  'screen-docslocker':['#ffb86b','#ff7a8a','255,150,120'],'screen-dayend':['#ff8a75','#d93856','255,102,117'],
-  'screen-pjp':['#55f7c5','#43d9ff','85,247,197'],'screen-dashboard':['#55f7c5','#43d9ff','85,247,197']};
-function tag(){
-  const d=$('screen-dashboard'); if(!d) return;
-  d.querySelectorAll(':scope>.btn').forEach(b=>{
-    const oc=b.getAttribute('onclick')||'';let id=null;
-    if(b.id==='visitReportBtn')id='screen-visitreport';
-    else if(/mastersearch/.test(oc))id='screen-mastersearch';
-    else if(/openSummary/.test(oc))id='screen-summary';
-    else if(/openDocsLocker/.test(oc))id='screen-docslocker';
-    if(!id) return; const t=T[id];
-    b.dataset.fm=id;b.style.setProperty('--b1',t[0]);b.style.setProperty('--b2',t[1]);b.style.setProperty('--b-rgb',t[2]);
-  });
-}
-
-/* ---- single transition lifecycle ---- */
-const sheet=document.createElement('div');sheet.id='fmSheet';sheet.setAttribute('aria-hidden','true');document.body.appendChild(sheet);
-const RM=matchMedia('(prefers-reduced-motion:reduce)');
-let tok=0,src=null,home=null,ent=[];
-document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('.btn');
-  if(b&&!b.disabled) src={el:b,rect:b.getBoundingClientRect(),t:performance.now()};},true);
-
-function endSheet(){ sheet.getAnimations().forEach(a=>a.cancel()); sheet.style.display='none'; }
-function cancelEnter(){ ent.forEach(a=>{try{a.cancel();}catch(e){}}); ent=[]; }
-function geo(r){const sx=Math.max(r.width/innerWidth,.001),sy=Math.max(r.height/innerHeight,.001);
-  return{t:`translate(${r.left}px,${r.top}px) scale(${sx},${sy})`,br:`${18/sx}px / ${18/sy}px`};}
-function show(th){sheet.style.background=`linear-gradient(135deg,${th[0]},${th[1]})`;sheet.style.display='block';}
-function finish(my,list){Promise.all(list.map(a=>a.finished)).then(()=>{if(my===tok)endSheet();}).catch(()=>{});}
-function expand(th,r,my){
-  show(th);const g=geo(r);
-  finish(my,[
-    sheet.animate([{transform:g.t,borderRadius:g.br},{transform:'none',borderRadius:'0px'}],{duration:640,easing:SPR,fill:'forwards'}),
-    sheet.animate([{opacity:1},{opacity:0}],{duration:260,delay:300,easing:'ease-out',fill:'forwards'})]);
-}
-function shrink(th,r,my){
-  show(th);const g=geo(r);
-  finish(my,[
-    sheet.animate([{transform:'none',borderRadius:'0px'},{transform:g.t,borderRadius:g.br}],{duration:420,easing:EASE,fill:'forwards'}),
-    sheet.animate([{opacity:0},{opacity:1,offset:.2},{opacity:1,offset:.7},{opacity:0}],{duration:420,fill:'forwards'})]);
-}
-function enter(scr,delay){            /* staggered, transform+opacity only; fill:'backwards' leaves no stale styles */
-  cancelEnter();
-  [...scr.children].filter(k=>getComputedStyle(k).display!=='none').slice(0,9).forEach((k,i)=>
-    ent.push(k.animate([{opacity:0,transform:'translateY(22px)'},{opacity:1,transform:'none'}],
-      {duration:680,delay:delay+i*45,easing:SPR2,fill:'backwards'})));
-}
-function visible(r){return r.width>0&&r.bottom>0&&r.top<innerHeight;}
-function run(prev,id,dir){
-  endSheet();cancelEnter();
-  if(RM.matches||!prev||prev===id||id==='screen-camera'||id==='screen-docviewer') return;
-  const scr=$(id),my=++tok;
-  const fresh=src&&performance.now()-src.t<1500?src:null;src=null;
-  if(dir==='back'){
-    const th=T[prev];
-    if(th&&id==='screen-dashboard'&&home&&home.isConnected&&home.dataset.fm===prev){
-      const r=home.getBoundingClientRect(); if(visible(r)) shrink(th,r,my);
-    }
-    enter(scr,0);return;
-  }
-  const th=T[id];
-  if(fresh&&th&&visible(fresh.rect)){
-    if(prev==='screen-dashboard'&&fresh.el.dataset.fm===id) home=fresh.el;
-    expand(th,fresh.rect,my);enter(scr,200);
-  }else enter(scr,0);
-}
-const orig=window.renderScreen;
-if(typeof orig==='function') window.renderScreen=function(id,dir){
-  const pe=document.querySelector('.screen.active'),prev=pe&&pe.id;
-  const r=orig.apply(this,arguments);
-  try{ tag(); if(id==='screen-login') resyncPin(); run(prev,id,dir); }catch(e){ endSheet(); cancelEnter(); }
-  return r;
-};
-tag();
-
-/* keep the focused field clear of the on-screen keyboard */
-document.addEventListener('focusin',e=>{const t=e.target;
-  if(t.matches&&t.matches('input,textarea,select')&&t.closest('#screen-visitreport,#screen-login,#screen-mastersearch'))
-    setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:RM.matches?'auto':'smooth'});}catch(_){}},320);});
-})();
-</script>
 </body>
 </html>
