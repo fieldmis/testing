@@ -872,7 +872,6 @@ html{scroll-behavior:auto !important;}
     <h1>Workshop Master</h1>
     <div class="card">
       <input type="text" id="searchInput" placeholder="Bizom ID / Share Code / Mobile — commas for many" autocomplete="off">
-      <div class="muted" style="margin:8px 2px 10px">Search many at once: 123456, 234567, 345678</div>
       <button class="btn primary" style="margin:0" id="searchBtn" onclick="doMasterSearch()">Search</button>
     </div>
     <button class="btn" style="width:100%" onclick="showScreen('screen-exceltool')">Workshop Lookup</button>
@@ -885,11 +884,10 @@ html{scroll-behavior:auto !important;}
     <h1>Workshop Lookup</h1>
     <div class="card" id="dbDownloadCard">
       <div style="font-weight:600;margin-bottom:6px">Download Workshop List</div>
-      <div class="muted" style="margin-bottom:10px">Full workshop data for your tagged DB(s) as an Excel / Google Sheets file.</div>
       <div id="dbDownloadBody"></div>
     </div>
     <div class="card">
-      <div>Upload an Excel file with a Share Code, Bizom ID, or Mobile Number column. Matching rows get filled in from Master Data — then you download the result.</div>
+      <div>Upload an Excel file with a WorkshopCode.</div>
       <input type="file" id="xlLookupFile" accept=".xlsx,.xls,.csv" style="margin-top:12px;width:100%" onchange="onExcelLookupFileSelected(event)">
     </div>
     <div class="card" id="xlLookupStatus" style="display:none"></div>
@@ -1080,7 +1078,7 @@ function renderScreen(id, direction){
   if(session && id!=='screen-login') lsSet('sfos_screen', id); // for reload restore
   if(id==='screen-visitreport') VisitForm.reset();
   if(id==='screen-exceltool' && session) renderDbDownloadCard();
-  if(id==='screen-dashboard' && session){ loadDashboardStats(); loadKpi(); prefetchDocs(); }
+  if(id==='screen-dashboard' && session){ dashPlayParked(el); loadDashboardStats(); loadKpi(); prefetchDocs(); }
   if(id==='screen-dashboard') renderSyncBadge();
   if(id==='screen-dashboard') ensureHomeBackGuardEntry();
 }
@@ -1601,7 +1599,7 @@ async function renderDbDownloadCard(){
   dbCardItems = dbs.map(name => ({name, count: dbWorkshopRows(name).length}));
   const nf = n => n.toLocaleString('en-IN');
   let html = '';
-  if(!tagged) html += '<div class="muted" style="margin-bottom:8px">You are not tagged to a DB yet, so every DB is listed.</div>';
+  if(!tagged) html += '<div class="muted" style="margin-bottom:8px">Select the DB name and Download.</div>';
   if(dbCardItems.length === 1){
     html += `<div style="margin-bottom:12px"><div style="font-weight:600;word-break:break-word">${esc(dbCardItems[0].name)}</div><div class="muted">${nf(dbCardItems[0].count)} workshops</div></div>`;
   } else {
@@ -2375,33 +2373,87 @@ function updateDashboardButtons(){
 }
 
 /* ====================== DASHBOARD ANIMATION (Visits page + KPI page) ======================
- * Every bar chart and progress ring on the dashboard moves the same way: ONE clock, ONE cubic ease-out curve
- * (fast at first, slowing as it reaches the final value), with the numbers counting up together with the bars
- * and rings. Only the motion lives here - colours and layout are untouched.
- * It plays when a chart is first drawn (or its data changes) and again each time you switch between the
- * Visits and KPI pages. To change the speed, edit DASH_ANIM_MS. */
+ * Bars and rings move with ONE clock and ONE cubic ease-out curve (fast at first, slowing as they reach the
+ * final value) while their numbers count up. Only motion lives here - colours and layout are untouched.
+ *
+ * WHEN IT PLAYS: once per page load, for each chart - the first time you can see it after the app (re)loads.
+ *  - At startup the tiles are drawn at once from the figures saved on the last visit (see loadDashboardStats), so
+ *    they are never blank while the server answers. The animation runs on those, and the fresh figures blend in
+ *    when they arrive.
+ *  - After that first play, new figures just appear. Switching between the Visits and KPI pages, or between KPI
+ *    Overview and Details, does not replay it. A chart on a page you have not opened yet waits, and plays the
+ *    first time you open that page.
+ *  - Logging out resets this, so the next person to log in sees it play again.
+ * To change the speed, edit DASH_ANIM_MS. */
 const DASH_ANIM_MS = 4000;
+const DASH_BLEND_MS = 800;     // shortest time for fresh figures to blend in while the first animation is still running
 function easeOutCubic(x){ return 1 - Math.pow(1 - x, 3); }
-// step(e) draws the chart at progress e (0 = empty ... 1 = final). A new animation on the same host replaces the old one.
-function dashAnimate(host, step){
-  if(host._anim){ cancelAnimationFrame(host._anim); host._anim = 0; }
-  host.setAttribute('data-dash-anim', '1');
-  host._replay = () => dashAnimate(host, step);
-  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const onScreen = host.getClientRects().length > 0;       // a hidden page (e.g. KPI while Visits is showing) is drawn finished; it plays when shown
-  if(reduce || !onScreen){ step(1); return; }
-  step(0);
-  let t0 = null;
-  const frame = now => {
-    if(t0 === null) t0 = now;
-    const p = Math.min((now - t0) / DASH_ANIM_MS, 1);
-    step(easeOutCubic(p));
-    host._anim = p < 1 ? requestAnimationFrame(frame) : 0;
-  };
-  host._anim = requestAnimationFrame(frame);
+function dashReduceMotion(){ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+function dashOnScreen(host){ return host.getClientRects().length > 0; }
+
+// host: the element that owns one chart. targets: the final numbers, one per animated channel (a bar's height and its
+// value, a ring's length and its number ...). draw(values, isFinal) puts a set of numbers on screen.
+// A host keeps its state in host._tw: {vals, from, to, t0, dur, raf, parked, draw}.
+function dashTween(host, targets, draw){
+  const st = host._tw;
+  if(!st){                                          // first time this page load: play from empty
+    host._tw = {vals: [], from: [], to: targets.slice(), t0: 0, dur: DASH_ANIM_MS, raf: 0, parked: false, draw};
+    host.setAttribute('data-dash-anim', '1');
+    if(dashReduceMotion()){ host._tw.vals = targets.slice(); draw(host._tw.vals, true); }
+    else if(!dashOnScreen(host)){ host._tw.vals = targets.slice(); host._tw.parked = true; draw(host._tw.vals, true); }   // not visible yet: waits for the first time it is shown
+    else dashPlay(host);
+    return;
+  }
+  st.draw = draw;
+  if(st.raf){                                       // the first animation is still running: blend the fresh figures in (no jump)
+    st.from = (st.vals.length === targets.length) ? st.vals.slice() : targets.map(() => 0);
+    st.to = targets.slice();
+    st.dur = Math.max(DASH_BLEND_MS, st.dur - (performance.now() - st.t0));
+    st.t0 = performance.now();
+    draw(st.from, false);                           // the chart may have been rebuilt: show where it is right now
+    return;
+  }
+  st.to = targets.slice(); st.vals = targets.slice(); // already played (or waiting to be shown): just show the figures
+  draw(st.vals, true);
 }
-function replayDashAnim(root){
-  root.querySelectorAll('[data-dash-anim]').forEach(el => { if(el._replay) el._replay(); });
+function dashPlay(host){
+  const st = host._tw;
+  st.parked = false;
+  st.from = st.to.map(() => 0);
+  st.vals = st.from.slice();
+  st.t0 = performance.now(); st.dur = DASH_ANIM_MS;
+  st.draw(st.vals, false);
+  const frame = () => {
+    const p = Math.min((performance.now() - st.t0) / st.dur, 1), e = easeOutCubic(p);
+    st.vals = (p >= 1) ? st.to.slice() : st.to.map((to, i) => st.from[i] + (to - st.from[i]) * e);
+    st.draw(st.vals, p >= 1);
+    st.raf = p < 1 ? requestAnimationFrame(frame) : 0;
+  };
+  st.raf = requestAnimationFrame(frame);
+}
+function dashTweenStop(host){                       // the chart is being replaced by something else (e.g. KPI Details)
+  const st = host._tw;
+  if(!st) return;
+  if(st.raf){ cancelAnimationFrame(st.raf); st.raf = 0; }
+  st.parked = false;
+}
+// Plays the charts that were drawn while out of sight, the first time they are in view.
+function dashPlayParked(root){
+  root.querySelectorAll('[data-dash-anim]').forEach(h => {
+    const st = h._tw;
+    if(st && st.parked && !st.raf && dashOnScreen(h)) dashPlay(h);
+  });
+}
+// Logout: forget everything, so the next login starts fresh and never shows the previous person's figures.
+function dashAnimReset(){
+  ['visitsChart', 'hoursChart', 'visitRing', 'kmStat'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    dashTweenStop(el); el._tw = null; el.innerHTML = ''; el.dataset.sig = '';
+  });
+  const kb = document.getElementById('kpiBody');
+  if(kb){ dashTweenStop(kb); kb._tw = null; }
+  dashStatsDrawn = false;
 }
 
 function buildBarChart(containerId, days, field, unit){
@@ -2409,9 +2461,7 @@ function buildBarChart(containerId, days, field, unit){
   const sig = JSON.stringify([days, field, unit]);
   if(el.dataset.sig === sig && el.innerHTML) return;   // same data: leave the tile untouched (no flicker)
   el.dataset.sig = sig;
-  if(el._anim){ cancelAnimationFrame(el._anim); el._anim = 0; }
-  el._replay = null;
-  if(!Array.isArray(days) || !days.length){ el.innerHTML = '<div class="muted">No data yet.</div>'; return; }
+  if(!Array.isArray(days) || !days.length){ dashTweenStop(el); el._tw = null; el.innerHTML = '<div class="muted">No data yet.</div>'; return; }
   const values = days.map(d=>{ const v = Number(d[field]); return Number.isFinite(v) ? v : 0; });
   const max = Math.max(...values, 1);
   const avg = values.reduce((a,b)=>a+b,0) / (values.length || 1);
@@ -2428,19 +2478,18 @@ function buildBarChart(containerId, days, field, unit){
               </div>`;
     }).join('')}
   `;
-  const bars = el.querySelectorAll('.bar'), labels = el.querySelectorAll('.bar .barValue');
-  dashAnimate(el, e => {                                // bars grow and their numbers count up on the same curve
-    bars.forEach((b, i) => {
-      b.style.height = (targetPct[i] * e) + '%';
-      labels[i].textContent = e >= 1 ? finalText[i] : (((field === 'hours') ? (values[i] * e).toFixed(1) : Math.round(values[i] * e)) + unit);
-    });
+  const n = days.length, bars = el.querySelectorAll('.bar'), labels = el.querySelectorAll('.bar .barValue');
+  dashTween(el, targetPct.concat(values), (v, fin) => {      // v = n bar heights, then n bar values
+    for(let i = 0; i < n; i++){
+      bars[i].style.height = v[i] + '%';
+      labels[i].textContent = fin ? finalText[i] : (((field === 'hours') ? v[n + i].toFixed(1) : Math.round(v[n + i])) + unit);
+    }
   });
 }
 
 function buildRing(containerId, value, target){
   { const el0 = document.getElementById(containerId), sig = value + '/' + target; if(el0.dataset.sig === sig && el0.innerHTML) return; el0.dataset.sig = sig; }
   const host = document.getElementById(containerId);
-  if(host._anim){ cancelAnimationFrame(host._anim); host._anim = 0; }
   const pct = target>0 ? Math.min(1, value/target) : 0;
   const r = 42, c = 2*Math.PI*r;
   host.innerHTML = `
@@ -2456,9 +2505,9 @@ function buildRing(containerId, value, target){
       <text class="ringText" x="50" y="50" text-anchor="middle" dominant-baseline="central" font-size="19" font-weight="700" style="fill:var(--text)">${value}/${target}</text>
     </svg>`;
   const arc = host.querySelector('.ringArc'), txt = host.querySelector('.ringText');
-  dashAnimate(host, e => {                              // the ring fills and its number counts up on the same curve
-    arc.setAttribute('stroke-dashoffset', c * (1 - pct * e));
-    txt.textContent = e >= 1 ? `${value}/${target}` : `${Math.round(value * e)}/${target}`;
+  dashTween(host, [pct, value], (v, fin) => {                // v = how full the ring is (0-1), then its number
+    arc.setAttribute('stroke-dashoffset', c * (1 - v[0]));
+    txt.textContent = fin ? `${value}/${target}` : `${Math.round(v[1])}/${target}`;
   });
 }
 
@@ -2551,8 +2600,7 @@ function renderKpiTile(){
     const d = a - t, r = Math.round(d * 10) / 10;
     return `<span class="v ${r < 0 ? 'sh' : r > 0 ? 'su' : 'z'}">${r > 0 ? '+' : r < 0 ? '−' : ''}${kpiFmt(Math.abs(d))}</span>`;
   };
-  if(body._anim){ cancelAnimationFrame(body._anim); body._anim = 0; }
-  body._replay = null;
+  dashTweenStop(body);                                  // Details has nothing to animate
   if(kpi.view === 'details'){
     // Details: Target / Achievement for every KPI. Sub-KPIs (Sub-Target / Sub-Achievement) are listed here only.
     let h = '<div class="kpiTb"><div class="kpiRow kpiH"><span>KPI</span><span class="v">Target</span><span class="v">Ach.</span><span class="v">Short / Surplus</span></div>';
@@ -2589,9 +2637,9 @@ function renderKpiTile(){
     const parts = oTxt.match(/^(\D*?)(\d[\d,]*\.?\d*)(\D*)$/);
     const decs = parts ? (parts[2].split('.')[1] || '').length : 0;
     const numv = parts ? parseFloat(parts[2].replace(/,/g, '')) : 0;
-    dashAnimate(body, e => {
-      pg.setAttribute('stroke-dasharray', (dash * e) + ' ' + C);
-      big.textContent = (e >= 1 || !parts) ? oTxt : (parts[1] + (numv * e).toFixed(decs) + parts[3]);
+    dashTween(body, [dash, numv], (v, fin) => {          // v = ring length, then the centre number
+      pg.setAttribute('stroke-dasharray', v[0] + ' ' + C);
+      big.textContent = (fin || !parts) ? oTxt : (parts[1] + v[1].toFixed(decs) + parts[3]);
     });
   }
 }
@@ -2649,7 +2697,7 @@ function paintDash(animate, dir){
     pg.classList.remove('slideL', 'slideR');
     void pg.offsetWidth;                                    // restart the little slide-in
     pg.classList.add(dir > 0 ? 'slideL' : 'slideR');
-    replayDashAnim(pg);                                     // bars / rings play again for the page you switched to
+    dashPlayParked(pg);                                     // a chart that was waiting out of sight plays now, the first time it is shown
   }
 }
 function goDashPage(i, animate){
@@ -2686,14 +2734,36 @@ function setPagerHasKpi(has){
   pager.addEventListener('touchcancel', ()=>{ tracking = false; }, {passive:true});
 })();
 
+/* The Visits tiles used to stay blank until the server answered. Now the figures from the last visit are saved on the
+ * phone and drawn the moment the dashboard opens, so the animation plays straight away; the fresh figures blend in when
+ * they arrive. Saved figures are only used for the same person. From an earlier day, today's count is shown as 0 until
+ * the real one arrives (the earlier days still help), and the month's km is skipped if the month has changed. */
+const DASH_CACHE_KEY = 'sfos_dash1';
+let dashStatsDrawn = false;      // true once the tiles have been drawn since the page loaded / since login
+function drawDashStats(d, withKm){
+  buildBarChart('visitsChart', d.days, 'visits', '');
+  buildBarChart('hoursChart', d.days, 'hours', '');
+  buildRing('visitRing', Number(d.todayVisits) || 0, 15);
+  if(withKm !== false) buildKmStat('kmStat', d.monthKm);
+}
 async function loadDashboardStats(){
+  const uid = session.userId;
+  if(!dashStatsDrawn){
+    dashStatsDrawn = true;
+    const saved = lsJson(DASH_CACHE_KEY, null);
+    if(saved && saved.userId === uid && saved.data && Array.isArray(saved.data.days) && saved.data.days.length){
+      const today = todayStr(), sameDay = saved.date === today, sameMonth = String(saved.date || '').slice(0, 7) === today.slice(0, 7);
+      drawDashStats({days: saved.data.days, todayVisits: sameDay ? saved.data.todayVisits : 0, monthKm: saved.data.monthKm}, sameMonth);
+    }
+  }
   try{
-    const r = await api('getDashboard', {userId: session.userId});
+    const r = await api('getDashboard', {userId: uid});
     if(!r.ok) return;
-    buildBarChart('visitsChart', r.days, 'visits', '');
-    buildBarChart('hoursChart', r.days, 'hours', '');
-    buildRing('visitRing', Number(r.todayVisits) || 0, 15);
-    buildKmStat('kmStat', r.monthKm);
+    if(!session || session.userId !== uid) return;       // logged out (or someone else logged in) while waiting
+    drawDashStats(r);
+    if(Array.isArray(r.days) && r.days.length){
+      lsSet(DASH_CACHE_KEY, JSON.stringify({userId: uid, date: todayStr(), data: {days: r.days, todayVisits: r.todayVisits, monthKm: r.monthKm}}));
+    }
   }catch(e){}
 }
 
@@ -4490,6 +4560,7 @@ function finishLogout(){
   lsDel('sfos_pjp_pending');
   session = null; todayLog = []; dayStarted = false; dayEnded = false; pjpPending = false;
   kpiReset();
+  dashAnimReset();
   document.getElementById('loginPin').value='';
   replaceScreen('screen-login', 'back');
 }
