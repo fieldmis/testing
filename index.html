@@ -4257,7 +4257,7 @@ function renderMasterResults(){
   if(total > shown) head += `<div class="muted" style="margin-top:8px">Showing the first ${shown} of ${total} rows. The download has all of them.</div>`;
   div.innerHTML =
     `<div class="card">${head}` +
-    `<button class="btn primary" style="width:100%;margin:12px 0 0" onclick="downloadMasterSearch()">Download Excel / Google Sheets file (.xlsx)</button></div>` +
+    `<button class="btn primary" style="width:100%;margin:12px 0 0" onclick="downloadMasterSearch()">Download</button></div>` +
     rowsToTable(s.headers, s.rows.slice(0, shown).map(r => r.map(v => ({value: v}))));
 }
 async function doMasterSearch(){
