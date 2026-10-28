@@ -2181,12 +2181,12 @@ async function prepareCapture(){
 
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
   if(!blob){ toast('Could not save photo.'); return null; }
-  return { blob, geo, capturedAt };
+  return { blob, geo, capturedAt, fileName: photoFileName(pendingCaptureType, capturedAt) };
 }
 
 /* Records the point, hands it to the retry queue, shares the photo, and moves on. */
 async function completeCapture(prepared){
-  const { blob, geo, capturedAt } = prepared;
+  const { blob, geo, capturedAt, fileName } = prepared;
   const point = {
     id: newId(),
     type: pendingCaptureType,
@@ -2213,7 +2213,7 @@ async function completeCapture(prepared){
 
   if(pendingCaptureType === 'visitform') VisitForm.submitReport();     // photo taken: now the report is sent
   const captionText = pendingCaptureType === 'visitform' ? VisitForm.getCaption() : '';
-  try{ await shareToWhatsApp(blob, 'selfie.jpg', captionText); }
+  try{ await shareToWhatsApp(blob, fileName, captionText, true); }
   catch(e){ /* best-effort */ }
 
   if(pendingCaptureType === 'start'){
@@ -2231,6 +2231,40 @@ async function completeCapture(prepared){
   } else {
     replaceScreen('screen-dashboard');
   }
+}
+
+/* Unique photo name from the capture moment (IST): e.g. StartDay_2026-10-28_18-45-32-120.jpg */
+const PHOTO_LABELS = { selfie:'Selfie', start:'StartDay', visitform:'Visit', end:'EndDay' };
+function photoFileName(type, d){
+  const t = new Date((d ? d.getTime() : Date.now()) + IST_OFFSET_MS).toISOString();   // IST wall-clock, read as UTC
+  const date = t.slice(0,10), time = t.slice(11,19).replace(/:/g,'-'), ms = t.slice(20,23);
+  return `${PHOTO_LABELS[type] || 'Photo'}_${date}_${time}-${ms}.jpg`;
+}
+
+/* Saves the photo to the phone under its own unique name. Never throws. */
+async function downloadPhoto(blob, fileName){
+  try{
+    const Plugins = window.Capacitor && window.Capacitor.Plugins;
+    if(Plugins && Plugins.Filesystem){
+      const dataUrl = await new Promise((resolve, reject)=>{
+        const r = new FileReader(); r.onload = ()=>resolve(r.result); r.onerror = reject; r.readAsDataURL(blob);
+      });
+      await Plugins.Filesystem.writeFile({
+        path: 'ShellFOS/' + fileName, data: dataUrl.split(',')[1],
+        directory: (Plugins.Directory && Plugins.Directory.Documents) || 'DOCUMENTS', recursive: true
+      });
+      toast('Photo saved: ' + fileName);
+      return;
+    }
+  }catch(e){ /* fall through to the browser download */ }
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 30000);
+    toast('Photo saved: ' + fileName);
+  }catch(e){ /* best-effort */ }
 }
 
 async function shareFileNative(blob, fileName, caption){
@@ -2272,7 +2306,7 @@ function askShareTap(label){
   });
 }
 
-async function shareToWhatsApp(blob, fileName='selfie.jpg', caption=''){
+async function shareToWhatsApp(blob, fileName='selfie.jpg', caption='', saveOnBack=false){
   const mimeType = blob.type || 'image/jpeg';
   const Plugins = window.Capacitor && window.Capacitor.Plugins;
   if(Plugins && Plugins.Share && Plugins.Filesystem){
@@ -2281,7 +2315,8 @@ async function shareToWhatsApp(blob, fileName='selfie.jpg', caption=''){
     try{
       await shareFileNative(blob, fileName, caption);
     }catch(e){
-      if(!(e && /cancel/i.test(e.message||''))) toast('Could not open the share sheet.');
+      if(e && /cancel|dismiss/i.test(e.message||'')){ if(saveOnBack) await downloadPhoto(blob, fileName); }   // back pressed on the share sheet
+      else toast('Could not open the share sheet.');
     }finally{
       setTimeout(()=>{ nativeShareCooldown = false; }, 1500);
     }
@@ -2295,12 +2330,12 @@ async function shareToWhatsApp(blob, fileName='selfie.jpg', caption=''){
   if(data && navigator.canShare && navigator.canShare(data)){
     try{ await navigator.share(data); return; }
     catch(e){
-      if(isShareAbort(e)) return;                       // rep closed the share sheet — nothing more to do
+      if(isShareAbort(e)){ if(saveOnBack) await downloadPhoto(blob, fileName); return; }   // back on the share sheet: keep the photo
       if(e && e.name === 'NotAllowedError'){            // browser wants a fresh tap
         const go = await askShareTap('Share your selfie on WhatsApp');
-        if(!go) return;
+        if(!go){ if(saveOnBack) await downloadPhoto(blob, fileName); return; }
         try{ await navigator.share(data); return; }
-        catch(e2){ if(isShareAbort(e2)) return; }
+        catch(e2){ if(isShareAbort(e2)){ if(saveOnBack) await downloadPhoto(blob, fileName); return; } }
       }
     }
   }
