@@ -703,6 +703,96 @@ html{scroll-behavior:auto !important;}
     .dvCenter{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;color:var(--muted);font-size:.92rem;}
     .dvZoom{position:absolute;right:14px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:3;flex-direction:column;gap:8px;}
     .dvZoom button{width:44px;height:44px;border-radius:50%;border:1px solid rgba(137,196,255,.22);background:rgba(10,15,26,.86);color:#eaf3ff;font-size:1.5rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0 0 2px;}
+
+/* ===== LOGIN: 6-BOX PIN — "Sequential Soft Glow" (matches the app's neon palette) ===== */
+#screen-login.active h1{animation:pinFadeUp .6s cubic-bezier(.16,1,.3,1) .05s both}
+#screen-login.active>.card{animation:pinFadeUp .6s cubic-bezier(.16,1,.3,1) .15s both}
+@keyframes pinFadeUp{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:none}}
+
+#screen-login .pinRow{position:relative;display:flex;gap:9px;justify-content:center;width:100%;margin:0 0 4px}
+#screen-login .pinBox{
+  flex:1 1 0;max-width:52px;height:56px;border-radius:14px;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  border:1.5px solid rgba(121,214,255,.18);background:rgba(3,9,17,.78);
+  box-shadow:inset 0 3px 10px rgba(0,0,0,.3);
+  transition:border-color .35s cubic-bezier(.16,1,.3,1),background .35s cubic-bezier(.16,1,.3,1),box-shadow .35s cubic-bezier(.16,1,.3,1),transform .35s cubic-bezier(.16,1,.3,1);
+}
+/* the dot that "pops" in when a digit is typed */
+#screen-login .pinBox::after{
+  content:"";width:12px;height:12px;border-radius:50%;background:#43d9ff;
+  box-shadow:0 0 10px rgba(67,217,255,.7);transform:scale(0);opacity:0;
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .2s ease;
+}
+/* blinking caret in the box that is waiting for the next digit */
+#screen-login .pinBox::before{
+  content:"";position:absolute;width:2px;height:22px;border-radius:2px;background:#43d9ff;
+  box-shadow:0 0 8px rgba(67,217,255,.7);opacity:0;
+}
+#screen-login .pinRow.focused .pinBox.active{
+  border-color:rgba(67,217,255,.8);
+  box-shadow:0 0 0 3px rgba(67,217,255,.08),0 0 18px rgba(67,217,255,.14),inset 0 3px 10px rgba(0,0,0,.3);
+}
+#screen-login .pinRow.focused .pinBox.active::before{animation:pinCaret 1s steps(1) infinite}
+@keyframes pinCaret{0%,100%{opacity:1}50%{opacity:0}}
+
+#screen-login .pinBox.filled{
+  border-color:rgba(67,217,255,.55);background:rgba(67,217,255,.08);transform:scale(1.04);
+  box-shadow:0 0 0 2px rgba(67,217,255,.12),0 0 18px rgba(67,217,255,.15),inset 0 0 12px rgba(67,217,255,.06);
+}
+#screen-login .pinBox.filled::after{transform:scale(1);opacity:1}
+
+/* all six filled: the boxes turn green and glow one after another */
+#screen-login .pinRow.complete .pinBox{
+  border-color:rgba(85,247,197,.5);background:rgba(85,247,197,.07);
+  animation:pinSoftGlow 1.6s ease-in-out infinite;
+}
+#screen-login .pinRow.complete .pinBox::after{background:#55f7c5;box-shadow:0 0 10px rgba(85,247,197,.7)}
+#screen-login .pinRow.complete .pinBox:nth-child(2){animation-delay:.12s}
+#screen-login .pinRow.complete .pinBox:nth-child(3){animation-delay:.24s}
+#screen-login .pinRow.complete .pinBox:nth-child(4){animation-delay:.36s}
+#screen-login .pinRow.complete .pinBox:nth-child(5){animation-delay:.48s}
+#screen-login .pinRow.complete .pinBox:nth-child(6){animation-delay:.6s}
+@keyframes pinSoftGlow{
+  0%,100%{box-shadow:0 0 0 2px rgba(85,247,197,.12),0 0 18px rgba(85,247,197,.18)}
+  50%{box-shadow:0 0 0 3px rgba(85,247,197,.2),0 0 32px rgba(85,247,197,.32)}
+}
+
+/* wrong / missing PIN: quick shake with a red flash, then back to normal */
+#screen-login .pinRow.shake{animation:pinShake .45s cubic-bezier(.36,.07,.19,.97)}
+#screen-login .pinRow.shake .pinBox{animation:pinFlash .6s ease}
+@keyframes pinShake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-7px)}40%,60%{transform:translateX(7px)}}
+@keyframes pinFlash{40%{border-color:rgba(255,107,90,.75);box-shadow:0 0 0 2px rgba(255,107,90,.15),0 0 18px rgba(255,107,90,.25)}}
+
+/* the real input: invisible, covers the boxes, so a tap anywhere opens the number keyboard */
+#screen-login .pinRow #loginPin{
+  position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;z-index:3;
+  opacity:0;border:0;background:transparent;color:transparent;caret-color:transparent;
+  box-shadow:none;font-size:16px;cursor:text;
+}
+#screen-login .pinRow #loginPin:focus{outline:none;border:0;box-shadow:none}
+
+#screen-login .pinHint{text-align:center;font-size:.7rem;color:#8fa6c1;letter-spacing:.04em;min-height:16px;margin:12px 0 18px;transition:color .3s}
+#screen-login .pinHint.ok{color:#55f7c5}
+
+/* Log In button breathes gently once all 6 digits are in (button stays usable at any time, as before) */
+#screen-login #loginBtn.ready{animation:pinBtnPulse 2s ease-in-out infinite}
+@keyframes pinBtnPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.12)}}
+
+/* ===== LOGIN OVERLAY (Authenticating / Success) ===== */
+#loginOverlay{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(3,6,12,.74);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+#loginOverlay.show{display:flex;animation:loFade .15s ease}
+@keyframes loFade{from{opacity:0}to{opacity:1}}
+#loginOverlay .loCard{width:100%;max-width:300px;text-align:center;padding:32px 26px;border-radius:22px;background:rgba(10,16,28,.95);border:1px solid rgba(67,217,255,.22);box-shadow:0 20px 50px rgba(0,0,0,.5),0 0 40px rgba(67,217,255,.1);animation:loPop .3s cubic-bezier(.16,1,.3,1) both}
+@keyframes loPop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+#loginOverlay .loSpin{width:48px;height:48px;margin:0 auto 18px;border:3px solid rgba(67,217,255,.15);border-top-color:#43d9ff;border-radius:50%;animation:loSpin .85s linear infinite}
+@keyframes loSpin{to{transform:rotate(360deg)}}
+#loginOverlay .loCheck{display:none;width:64px;height:64px;margin:0 auto 16px;border-radius:50%;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(85,247,197,.2),rgba(67,217,255,.2));border:2px solid #55f7c5;box-shadow:0 0 28px rgba(85,247,197,.25)}
+#loginOverlay.ok .loSpin{display:none}
+#loginOverlay.ok .loCheck{display:flex;animation:loCheckPop .5s cubic-bezier(.16,1,.3,1)}
+@keyframes loCheckPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}
+#loginOverlay .loCheck svg{width:32px;height:32px;stroke:#55f7c5;stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+#loginOverlay .loTitle{font-size:1.05rem;font-weight:700;margin-bottom:6px;color:#f2f7ff}
+#loginOverlay .loSub{font-size:.8rem;color:#8d9bb3}
   </style>
 </head>
 <body>
@@ -722,8 +812,19 @@ html{scroll-behavior:auto !important;}
     <div class="card">
       <label>User ID</label>
       <input type="text" id="loginUserId" autocomplete="username">
-      <label>PIN</label>
-      <input type="password" id="loginPin" inputmode="numeric" autocomplete="current-password">
+      <label for="loginPin">PIN</label>
+      <div class="pinRow" id="pinRow">
+        <div class="pinBox" aria-hidden="true"></div>
+        <div class="pinBox" aria-hidden="true"></div>
+        <div class="pinBox" aria-hidden="true"></div>
+        <div class="pinBox" aria-hidden="true"></div>
+        <div class="pinBox" aria-hidden="true"></div>
+        <div class="pinBox" aria-hidden="true"></div>
+        <!-- The real input stays (same id) so login, autofill, logout-reset and the keyboard all work as before;
+             it sits invisibly over the six boxes and the boxes just mirror what is typed. -->
+        <input type="password" id="loginPin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" aria-label="6-digit PIN">
+      </div>
+      <div class="pinHint" id="pinHint" aria-live="polite">Enter 6-digit PIN</div>
       <button class="btn primary" id="loginBtn" onclick="doLogin()">Log In</button>
       <div class="muted" id="loginMsg"></div>
     </div>
@@ -934,6 +1035,15 @@ html{scroll-behavior:auto !important;}
 
 <div class="toast" id="toast"></div>
 
+<!-- LOGIN OVERLAY: Authenticating… → Success -->
+<div id="loginOverlay" role="alertdialog" aria-live="assertive" aria-label="Signing in">
+  <div class="loCard">
+    <div class="loSpin"></div>
+    <div class="loCheck"><svg viewBox="0 0 24 24"><polyline points="5 13 9 17 19 7"/></svg></div>
+    <div class="loTitle" id="loTitle">Authenticating…</div>
+    <div class="loSub" id="loSub">Verifying credentials securely</div>
+  </div>
+</div>
 <script>
 /* ====================== CONFIG ====================== */
 const CONFIG = {
@@ -1648,13 +1758,28 @@ async function doLogin(){
   const userId = document.getElementById('loginUserId').value.trim();
   const pin = document.getElementById('loginPin').value.trim();
   const msgEl = document.getElementById('loginMsg');
-  if(!userId || !pin){ msgEl.innerHTML='Enter User ID and PIN.'; return; }
+  if(!userId || !pin){ msgEl.innerHTML='Enter User ID and PIN.'; if(window.haptic) haptic('error'); return; }
   const btn = document.getElementById('loginBtn');
+  const LO = window.loginOverlay || { show(){}, success(){}, hide(){}, sleep:ms=>new Promise(r=>setTimeout(r,ms)) };
+  const AUTH_MIN_MS = 1600, FAIL_MIN_MS = 800, SUCCESS_MS = 1200;   // fixed overlay timings
   setBtnLoading(btn, true);
   msgEl.innerHTML = '';
+  LO.show();                                   // Authenticating… appears the instant Log In is pressed
+  const t0 = Date.now();
+  const holdUntil = ms => LO.sleep(Math.max(0, ms - (Date.now() - t0)));
   try{
     const r = await api('login', {userId, pin});
-    if(!r.ok){ msgEl.textContent = r.message || 'Login failed.'; return; }
+    if(!r.ok){
+      await holdUntil(FAIL_MIN_MS);
+      LO.hide();
+      msgEl.textContent = r.message || 'Login failed.';
+      if(window.haptic) haptic('error');
+      return;
+    }
+    await holdUntil(AUTH_MIN_MS);
+    LO.success();                              // Success overlay
+    await LO.sleep(SUCCESS_MS);
+    LO.hide();
     session = {userId, userName:r.userName || userId, pjp:r.pjp || '', date: todayStr()};
     lsSet('sfos_session', JSON.stringify(session));
     loadDayState();
@@ -1669,8 +1794,12 @@ async function doLogin(){
     pjpPending = true;
     lsSet('sfos_pjp_pending', '1');
     showScreen('screen-pjp');
-  }catch(e){ msgEl.textContent = (e && e.name === 'AbortError') ? 'The server is taking too long. Please try again.' : 'Could not reach the server. Check your internet and try again.'; }
-  finally{ setBtnLoading(btn, false); }
+  }catch(e){
+    LO.hide();
+    msgEl.textContent = (e && e.name === 'AbortError') ? 'The server is taking too long. Please try again.' : 'Could not reach the server. Check your internet and try again.';
+    if(window.haptic) haptic('error');
+  }
+  finally{ LO.hide(); setBtnLoading(btn, false); }
 }
 
 /* ====================== PJP CONFIRM / UPDATE ====================== */
@@ -4777,6 +4906,109 @@ if(session && session.date === todayStr()){
 } else {
   warmBackend();   // on the login screen: wake the server while the rep types
 }
+</script>
+<script>
+/* Login PIN boxes: the six boxes only MIRROR the real #loginPin input. doLogin(), logout reset (loginPin.value=''),
+ * autofill and the warm-up focus hook all keep reading/writing that same input, so nothing else in the app changes. */
+(function(){
+  const input = document.getElementById('loginPin');
+  const row   = document.getElementById('pinRow');
+  const hint  = document.getElementById('pinHint');
+  const btn   = document.getElementById('loginBtn');
+  const msg   = document.getElementById('loginMsg');
+  if(!input || !row) return;
+  const boxes = Array.prototype.slice.call(row.querySelectorAll('.pinBox'));
+  const N = boxes.length;
+
+  function render(){
+    const len = Math.min(input.value.length, N);
+    boxes.forEach(function(b, i){
+      b.classList.toggle('filled', i < len);
+      b.classList.toggle('active', i === len && len < N);
+    });
+    const done = input.value.length >= N;
+    row.classList.toggle('complete', done);
+    if(btn) btn.classList.toggle('ready', done);
+    if(hint){
+      hint.classList.toggle('ok', done);
+      hint.textContent = done ? 'PIN complete \u2014 ready to log in' : (len ? (len + '/' + N + ' digits') : ('Enter ' + N + '-digit PIN'));
+    }
+  }
+
+  // Code elsewhere sets loginPin.value = '' on logout; that does not fire an event, so watch the setter too.
+  try{
+    const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    Object.defineProperty(input, 'value', {
+      configurable: true,
+      get: function(){ return d.get.call(this); },
+      set: function(v){ d.set.call(this, v); render(); }
+    });
+  }catch(e){}
+
+  function caretToEnd(){ try{ const n = input.value.length; input.setSelectionRange(n, n); }catch(e){} }
+  input.addEventListener('input',  render);
+  input.addEventListener('change', render);
+  input.addEventListener('focus',  function(){ row.classList.add('focused'); caretToEnd(); render(); });
+  input.addEventListener('blur',   function(){ row.classList.remove('focused'); });
+  input.addEventListener('click',  caretToEnd);
+  window.addEventListener('pageshow', render);
+
+  // Shake the boxes whenever the login screen shows a message (wrong PIN, missing fields, no connection...).
+  if(msg && window.MutationObserver){
+    new MutationObserver(function(){
+      if(!msg.textContent.trim()) return;
+      row.classList.remove('shake'); void row.offsetWidth; row.classList.add('shake');
+    }).observe(msg, {childList:true, characterData:true, subtree:true});
+    row.addEventListener('animationend', function(e){ if(e.target === row) row.classList.remove('shake'); });
+  }
+  render();
+})();
+
+/* Login overlay controller (used by doLogin) */
+window.loginOverlay = (function(){
+  const el = document.getElementById('loginOverlay');
+  const title = document.getElementById('loTitle');
+  const sub = document.getElementById('loSub');
+  return {
+    sleep: function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); },
+    show: function(){
+      if(!el) return;
+      try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+      el.classList.remove('ok');
+      title.textContent = 'Authenticating\u2026';
+      sub.textContent = 'Verifying credentials securely';
+      el.classList.add('show');
+    },
+    success: function(){
+      if(!el) return;
+      el.classList.add('ok');
+      title.textContent = 'Success';
+      sub.textContent = 'You are now signed in';
+      if(window.haptic) haptic('success');
+    },
+    hide: function(){ if(el) el.classList.remove('show','ok'); }
+  };
+})();
+
+/* Vibration feedback (Android / browsers that support navigator.vibrate; silently ignored elsewhere, e.g. iPhone) */
+window.haptic = function(kind){
+  try{
+    if(!navigator.vibrate) return;
+    const p = kind === 'success' ? [18,45,28] : kind === 'error' ? [45,55,45] : kind === 'light' ? 8 : 14;
+    navigator.vibrate(p);
+  }catch(e){}
+};
+// every action button / tile / back button: a short tick on tap (click only fires on a real tap, not while scrolling)
+document.addEventListener('click', function(e){
+  const t = e.target && e.target.closest ? e.target.closest('button, .btn, .backBtn, .docLink, [role="button"], [onclick]') : null;
+  if(!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+  haptic('tap');
+}, true);
+// a light tick for each PIN digit typed
+(function(){
+  const pin = document.getElementById('loginPin'); let last = 0;
+  if(pin) pin.addEventListener('input', function(){ const n = pin.value.length; if(n > last) haptic('light'); last = n; });
+})();
 </script>
 <script>
 (function(){
