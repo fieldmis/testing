@@ -71,6 +71,7 @@
     /* ---------- surfaces ---------- */
     .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px;
           position:relative;box-shadow:0 1px 2px rgba(0,0,0,.05);}
+    .card>:last-child{margin-bottom:0;}
     .formCard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;position:relative;box-shadow:0 1px 2px rgba(0,0,0,.05);}
     .formCard iframe{height:900px;}
     .formLoading{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:var(--card);color:var(--muted);font-size:.875rem;z-index:1;}
@@ -131,6 +132,29 @@
     @keyframes l6-0-0{0%{transform:scaleX(1) rotate(0deg)}50%{transform:scaleX(-1) rotate(-90deg)}}
     @keyframes l6-1{16.5%{transform:perspective(150px) rotateX(-90deg) rotateY(0deg) rotateX(0deg);filter:grayscale(.8)}33%{transform:perspective(150px) rotateX(-180deg) rotateY(0deg) rotateX(0deg)}66%{transform:perspective(150px) rotateX(-180deg) rotateY(-180deg) rotateX(0deg)}100%{transform:perspective(150px) rotateX(-180deg) rotateY(-180deg) rotateX(-180deg);filter:grayscale(.8)}}
 
+    /* colour loader: four dots orbit and converge while the shape morphs circle > octagon > rounded square.
+       Sized in em (6.25em box): .cLoader--sm for the camera map thumbnail. */
+    .cLoader{position:relative;flex:none;width:6.25em;height:6.25em;margin:0 auto;font-size:14px;}
+    .cLoader--sm{font-size:9px;}
+    .cl-spin{position:absolute;inset:0;margin:auto;width:6.25em;height:6.25em;animation:clRotate 2.4s linear infinite;}
+    .cl-white{position:absolute;inset:0;background:var(--cl-flash,rgba(23,23,23,.1));opacity:0;animation:clFlash 2.4s linear infinite;}
+    .cl-dot{position:absolute;margin:auto;width:2.4em;height:2.4em;border-radius:50%;}
+    .cl-dot:nth-child(2){top:0;bottom:0;left:0;background:#ff4444;animation:clDotsY 2.4s linear infinite,clMorph 7.2s ease-in-out infinite;}
+    .cl-dot:nth-child(3){left:0;right:0;top:0;background:#ffbb33;animation:clDotsX 2.4s linear infinite,clMorph 7.2s ease-in-out infinite;}
+    .cl-dot:nth-child(4){top:0;bottom:0;right:0;background:#99cc00;animation:clDotsY 2.4s linear infinite,clMorph 7.2s ease-in-out infinite;}
+    .cl-dot:nth-child(5){left:0;right:0;bottom:0;background:#33b5e5;animation:clDotsX 2.4s linear infinite,clMorph 7.2s ease-in-out infinite;}
+    /* every clip-path below has the same 8 points, so the browser can tween them instead of snapping */
+    @keyframes clMorph{
+      0%,16.66%{border-radius:50%;clip-path:polygon(30% 0,70% 0,100% 0,100% 100%,70% 100%,30% 100%,0 100%,0 0);}
+      33.33%,50%{border-radius:0;clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%);}
+      66.66%,83.33%{border-radius:25%;clip-path:polygon(30% 0,70% 0,100% 0,100% 100%,70% 100%,30% 100%,0 100%,0 0);}
+      100%{border-radius:50%;clip-path:polygon(30% 0,70% 0,100% 0,100% 100%,70% 100%,30% 100%,0 100%,0 0);}
+    }
+    @keyframes clRotate{0%{transform:rotate(0);width:6.25em;height:6.25em;}10%{width:6.25em;height:6.25em;}66%{width:2.4em;height:2.4em;}100%{transform:rotate(360deg);width:6.25em;height:6.25em;}}
+    @keyframes clDotsY{0%{opacity:1;width:2.4em;}66%{opacity:.1;width:2.4em;}77%{opacity:1;width:0;}100%{opacity:1;width:2.4em;}}
+    @keyframes clDotsX{0%{opacity:1;height:2.4em;}66%{opacity:.1;height:2.4em;}77%{opacity:1;height:0;}100%{opacity:1;height:2.4em;}}
+    @keyframes clFlash{0%,33%{opacity:0;border-radius:0;}55%{opacity:.6;border-radius:100%;}66%,100%{opacity:0;border-radius:0;}}
+
     /* ---------- tables and lists ---------- */
     table{width:100%;border-collapse:collapse;}
     td,th{border-bottom:1px solid var(--line);padding:12px 8px;font-size:.875rem;text-align:left;}
@@ -143,11 +167,10 @@
     .xlColRow:last-child{border-bottom:none;}
     .xlColRow input{width:20px;height:20px;flex:none;accent-color:var(--text);}
     .xlColRow label{flex:1;word-break:break-word;margin:0;color:var(--text);font-size:.9375rem;}
-    #screen-mastersearch .card:first-of-type{padding:12px;}
     #searchBtn{min-height:68px;}
     #searchResults .card{overflow:auto;}
     #summaryContent{overflow:auto;}
-    #shareSummaryBtn{margin-top:4px;}
+    #shareSummaryBtn{margin-top:0;}
 
     /* ---------- login ---------- */
     #screen-login{justify-content:center;align-items:center;padding:24px 16px;background:#fff8d6;}
@@ -159,7 +182,8 @@
     #screen-login>.card{padding:20px;margin:0;}
     #screen-login #loginBtn{margin:4px 0 0;}
     #screen-login #loginBtn:disabled{background:var(--raised);border-color:var(--line-strong);color:var(--muted);box-shadow:none;opacity:1;transform:none;}
-    #screen-login #loginMsg{text-align:center;margin-top:12px;min-height:20px;}
+    #screen-login #loginMsg{text-align:center;margin-top:12px;}
+    #screen-login #loginMsg:empty{display:none;}
     #screen-login #installBanner{order:-1;margin-bottom:12px;padding:16px;}
     #screen-login #installBanner .installTitle{font-weight:500;margin-bottom:4px;}
     #screen-login #installBanner .btn{margin:0;}
@@ -167,7 +191,7 @@
     #screen-login.active>.card{animation-delay:.05s;}
 
     /* ---------- beat plan ---------- */
-    #screen-pjp .pjpActions{position:sticky;bottom:0;z-index:5;margin-top:8px;padding:12px 0 8px;background:var(--sbg,var(--bg));border-top:1px solid var(--line);}
+    #screen-pjp .pjpActions{position:sticky;bottom:0;z-index:5;margin-top:0;padding:12px 0 8px;background:var(--sbg,var(--bg));border-top:1px solid var(--line);}
     #pjpContent{min-height:120px;}
     .pjpList{margin:0;padding-left:20px;}
     .pjpList li{margin-bottom:8px;font-size:.9375rem;line-height:1.4;padding-left:4px;}
@@ -184,7 +208,7 @@
     #camVideo,#camCanvas{width:100%;flex:1 1 0;height:0;min-height:0;object-fit:cover;background:#000;}
     #camVideo.mirrored{transform:scaleX(-1);}
     #camCanvas{display:none;}
-    .camControls{flex:none;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;background:var(--card);border-radius:20px 20px 0 0;}
+    .camControls{flex:none;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;background:var(--card);border-radius:20px 20px 0 0;}
     .camControls .btn{margin:0;width:auto;min-height:62px;padding:0 24px;}
     .camControls .btn.outline{justify-self:start;}
     .camControls #captureBtn{justify-self:center;}
@@ -199,7 +223,7 @@
     #stampMinimap{width:100%;height:100%;}
     .stampMapPin{position:absolute;top:50%;left:50%;width:9px;height:9px;background:#ff3b30;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);z-index:2;pointer-events:none;}
     .stampLoader{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:3;transition:opacity .3s var(--ease);}
-    .stampLoader .loader{color:#fff;}
+    .stampLoader .cLoader{--cl-flash:rgba(255,255,255,.55);}
     .stampLoader.hide{opacity:0;pointer-events:none;}
     .stampData{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
     .stampHeading{font-size:.875rem;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -245,14 +269,12 @@
     .kmBig{position:relative;display:inline-block;font-size:2rem;font-weight:500;line-height:1.2;padding-right:24px;color:var(--text);}
     .kmLabel{position:absolute;top:2px;right:0;font-size:.75rem;font-weight:400;color:var(--muted);}
 
-    #screen-dashboard>.btn{text-align:left;min-height:78px;padding-left:76px;padding-right:48px;margin-bottom:8px;}
+    #screen-dashboard>.btn{text-align:left;min-height:78px;padding-left:76px;padding-right:48px;margin-bottom:12px;}
     #screen-dashboard>.btn::before{content:"";position:absolute;left:14px;top:50%;margin-top:-23px;width:46px;height:46px;border-radius:12px;background-color:var(--chip,rgba(23,23,23,.1));background-repeat:no-repeat;background-position:center;background-size:26px;background-image:var(--glyph);}
     #screen-dashboard>.btn::after{content:"";position:absolute;right:16px;top:50%;margin-top:-8px;width:16px;height:16px;background:currentColor;opacity:.55;
       -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") no-repeat center/contain;
               mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") no-repeat center/contain;}
-    #screen-dashboard>.btn.danger{margin-top:8px;}
     #screen-dashboard>.btn.danger::after{content:none;}
-    #visitReportBtn+.btn,#startDayBtn+.btn{margin-top:8px;}
 
     .dashPager{margin-bottom:12px;touch-action:pan-y;}
     .dashTabs,.kpiSwitch{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:4px;}
@@ -273,7 +295,7 @@
     .sharePrompt{position:fixed;inset:0;z-index:400;display:flex;align-items:flex-end;justify-content:center;padding:16px;background:rgba(23,23,23,.45);}
     .sharePrompt .card{width:100%;max-width:440px;margin:0;}
     .sharePromptTitle{font-weight:500;margin-bottom:12px;color:var(--text);}
-    .sharePrompt .btn{margin:0 0 8px;}
+    .sharePrompt .btn{margin:0 0 12px;}
 
     /* ---------- KPI ---------- */
     .kpiTile{margin-bottom:12px;}
@@ -341,7 +363,7 @@
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
       background-repeat:no-repeat;background-position:right 12px center;background-size:16px;}
     select.vfSelect option{background:#fff;color:var(--text);}
-    .vfOptions{display:flex;flex-direction:column;gap:8px;}
+    .vfOptions{display:flex;flex-direction:column;gap:12px;}
     label.vfOpt{display:flex;align-items:flex-start;gap:12px;margin:0;padding:12px 14px;border-radius:10px;border:1px solid var(--line-strong);background:var(--card);
          cursor:pointer;font-size:.9375rem;font-weight:400;line-height:1.4;color:var(--text);
          transition:border-color .15s var(--ease),background-color .15s var(--ease);}
@@ -354,7 +376,7 @@
     .vfExtraGroup{border-left:2px solid var(--line-strong);padding-left:16px;}
     .vfExtraGroup.hidden{display:none;}
     .vfNavBar{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,500px);background:var(--card);border-top:1px solid var(--line);
-         padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:20;}
+         padding:12px 16px calc(12px + env(safe-area-inset-bottom));display:flex;gap:12px;z-index:20;}
     .vfNavBar .btn{width:auto;margin:0;min-height:62px;padding:12px 20px;font-size:1rem;}
     .vfNavBar #vfBtnNext{flex:1;}
     .vfNavBar #vfBtnBack{flex:0 0 auto;}
@@ -553,7 +575,7 @@
         <div class="stampMapBox" id="stampMapBox">
           <div id="stampMinimap"></div>
           <div class="stampMapPin"></div>
-          <div class="stampLoader" id="stampLoader"><div class="loader loader--sm"></div></div>
+          <div class="stampLoader" id="stampLoader"><div class="cLoader cLoader--sm" role="status" aria-label="Locating"><div class="cl-spin"><div class="cl-white"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div></div></div></div>
         </div>
         <div class="stampData">
           <div class="stampHeading" id="stampHeading">Locating…</div>
@@ -703,7 +725,7 @@
   <div class="screen" id="screen-summary">
     <button class="backBtn" onclick="goBack()">‹ Back</button>
     <h1>Summary</h1>
-    <div class="card" id="summaryContent"><div class="loaderWrap"><div class="loader"></div><div class="loaderLabel">Loading summary…</div></div></div>
+    <div class="card" id="summaryContent"><div class="loaderWrap"><div class="cLoader" role="status" aria-label="Loading summary"><div class="cl-spin"><div class="cl-white"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div></div></div><div class="loaderLabel">Loading summary…</div></div></div>
     <button class="btn primary" id="shareSummaryBtn" style="display:none" onclick="shareSummaryImage()">Share Summary</button>
   </div>
 
@@ -1055,6 +1077,9 @@ function toast(msg){
 
 function orbitLoaderHTML(label){
   return `<div class="orbitLoaderBox"><div class="loader"></div></div>${label?`<div class="loaderLabel">${label}</div>`:''}`;
+}
+function colorLoaderHTML(label){
+  return `<div class="loaderWrap"><div class="cLoader" role="status" aria-label="${label||'Loading'}"><div class="cl-spin"><div class="cl-white"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div><div class="cl-dot"></div></div></div>${label?`<div class="loaderLabel">${label}</div>`:''}</div>`;
 }
 function btnLoaderHTML(){
   return `<span class="btnLoader"><span class="bdot"></span><span class="bdot"></span><span class="bdot"></span><span class="bdot"></span></span>`;
@@ -4173,7 +4198,7 @@ async function openSummary(){
   const shareBtn = document.getElementById('shareSummaryBtn');
   shareBtn.style.display = 'none';
   lastSummaryData = null;
-  el.innerHTML = orbitLoaderHTML('Loading summary…');
+  el.innerHTML = colorLoaderHTML('Loading summary…');
   try{
     const r = await api('getSummary', {userId: session.userId});
     if(!r.ok || !r.rows || r.rows.length===0){ el.innerHTML = 'No summary available yet.'; return; }
