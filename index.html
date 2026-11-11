@@ -913,14 +913,18 @@ function renderScreen(id, direction){
   if(id==='screen-dashboard') ensureHomeBackGuardEntry();
 }
 let suppressHistoryPush = false; // true only while restoring a page after reload
+function histDepth(){ return (history.state && history.state.depth) || 0; }   // 0 = first entry of this app session
 function showScreen(id){
+  const before = histDepth();
   renderScreen(id);
-  if(suppressHistoryPush) history.replaceState({screen:id}, '', '#'+id);
-  else history.pushState({screen:id}, '', '#'+id);
+  // Opening home from the first entry already added its own entry (ensureHomeBackGuardEntry): don't stack a duplicate.
+  if(id === 'screen-dashboard' && histDepth() > before) return;
+  if(suppressHistoryPush) history.replaceState({screen:id, depth:histDepth()}, '', '#'+id);
+  else history.pushState({screen:id, depth:histDepth()+1}, '', '#'+id);
 }
 function replaceScreen(id, direction){
   renderScreen(id, direction);
-  history.replaceState({screen:id}, '', '#'+id);
+  history.replaceState({screen:id, depth:histDepth()}, '', '#'+id);
 }
 function goBack(){ history.back(); }
 
@@ -951,41 +955,20 @@ function armHomeBackExit(){
   homeBackArmTimer = setTimeout(()=>{ homeBackArmed = false; }, 2000);
 }
 
-/* Browsers flag history entries added WITHOUT a user gesture and then skip
-   them on Back (which is what made Back leave the app after a reload, and
-   made the exit warning appear only once). So entries are only pushed while
-   a gesture is active; otherwise the push is deferred to the next tap/key. */
-let historyRepair = null; // 'home' | 'sub' — history fix waiting for a gesture
-function hasUserGesture(){
-  return navigator.userActivation ? navigator.userActivation.isActive : true;
-}
+/* Home needs at least one app history entry BELOW it, so a Back press raises popstate here instead of closing the app.
+   The entry is added immediately (no tap needed): it becomes the top entry, so the browser's rule about skipping
+   entries added without a tap can never hide the entry underneath. */
 function ensureHomeBackGuardEntry(){
-  // Keeps one extra history entry sitting above the dashboard so a back
-  // press fires popstate (rather than escaping the page/app).
-  if(suppressHistoryPush || !hasUserGesture()){ historyRepair = 'home'; return; }
-  historyRepair = null;
-  history.pushState({screen:'screen-dashboard'}, '', '#screen-dashboard');
+  if(histDepth() >= 1) return;
+  history.pushState({screen:'screen-dashboard', depth:histDepth()+1}, '', '#screen-dashboard');
 }
-function flushHistoryRepair(){
-  if(!historyRepair || !session) return;
-  const kind = historyRepair;
-  const active = document.querySelector('.screen.active');
-  const id = active ? active.id : '';
-  historyRepair = null;
-  if(kind === 'home' && id === 'screen-dashboard'){
-    history.pushState({screen:'screen-dashboard'}, '', '#screen-dashboard');
-  } else if(kind === 'sub' && id && id !== 'screen-dashboard' && id !== 'screen-login'){
-    // Restored sub-page: make Back from it land on the dashboard.
-    history.replaceState({screen:'screen-dashboard'}, '', '#screen-dashboard');
-    history.pushState({screen:id}, '', '#'+id);
-  }
-}
-['pointerup','click','touchend','keydown'].forEach(t=>document.addEventListener(t, flushHistoryRepair, true));
 
 let vfPopGuard = false;
+let homeUndo = false;
 window.addEventListener('popstate', (e)=>{
   // The undo step below (history.go(1)) raises one more popstate; ignore that one.
   if(vfPopGuard){ vfPopGuard = false; return; }
+  if(homeUndo){ homeUndo = false; return; }          // the step-forward below raises one more popstate; ignore it
   // Visit report with an earlier question page: Back/swipe goes to that page, not out to the home screen.
   if(session && document.getElementById('screen-visitreport').classList.contains('active') && VisitForm.canStepBack()){
     vfPopGuard = true;
@@ -1008,8 +991,10 @@ window.addEventListener('popstate', (e)=>{
     // arms or confirms the "tap again to exit" warning. This check runs
     // first and ignores whatever screen the popped history entry claims,
     // so a stale/missing entry can never route this case to login.
-    ensureHomeBackGuardEntry();
-    armHomeBackExit();
+    if(homeBackArmed){ armHomeBackExit(); return; }   // second Back within 2 s: leave the app
+    armHomeBackExit();                                // first Back: show the warning ...
+    homeUndo = true; setTimeout(()=>{ homeUndo = false; }, 800);
+    history.go(1);                                    // ... and step forward again, so the next Back works the same way
     return;
   }
   let id = (e.state && e.state.screen) || 'screen-login';
@@ -1023,7 +1008,7 @@ window.addEventListener('popstate', (e)=>{
 });
 // The app restores scroll itself per screen; the browser's automatic per-history-entry restore fought it (wrong offsets after Back).
 if('scrollRestoration' in history) history.scrollRestoration = 'manual';
-history.replaceState({screen:'screen-login'}, '', location.href);
+history.replaceState({screen:'screen-login', depth:histDepth()}, '', location.href);
 
 /* ---- Android hardware/gesture back button ----
    On Android, the system back gesture (and the 3-button nav back key) can
@@ -4587,14 +4572,13 @@ function restoreScreenAfterReload(){
       buildDayEndTimeline(null);
       return;
     }
-    replaceScreen('screen-dashboard'); // sets historyRepair = 'home'
+    replaceScreen('screen-dashboard');
     let sub = true;
     if(saved === 'screen-docslocker' || saved === 'screen-docviewer') openDocsLocker();
     else if(saved === 'screen-summary') openSummary();
     else if(saved === 'screen-mastersearch') showScreen('screen-mastersearch');
     else if(saved === 'screen-visitreport' && dayStarted && !dayEnded) showScreen('screen-visitreport');
     else sub = false; // camera / anything else: stay on the dashboard
-    if(sub) historyRepair = 'sub'; // on first tap: dashboard entry + this page entry
   } finally {
     suppressHistoryPush = false;
   }
