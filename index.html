@@ -386,7 +386,14 @@
     .vfDone p{color:var(--muted);font-size:.875rem;line-height:1.5;margin:0 0 16px;}
     .vfSummary{text-align:left;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:12px;max-height:280px;overflow-y:auto;
          font-size:.75rem;font-family:var(--mono);color:var(--text2);white-space:pre-wrap;}
-    .vfDone .btn.primary{margin-top:4px;}
+    .vfDone .btn.primary{margin-top:0;}
+    .vfSummary{margin-bottom:12px;}
+    .vfCaption{margin:0 0 12px;text-align:left;}
+    .vfCaptionLabel{font-size:.8125rem;font-weight:500;color:var(--text2);margin:0 0 8px;}
+    .vfCaptionText{background:var(--card);border:1px solid var(--line-strong);border-radius:10px;padding:12px;font-size:.9375rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;color:var(--text);}
+    .vfCaption .vfCaptionHelp{margin:8px 0 12px;font-size:.8125rem;color:var(--muted);line-height:1.5;}
+    .vfCaptionActions{display:flex;gap:12px;}
+    .vfCaptionActions .btn{flex:1;margin:0;padding:12px 8px;}
     .vfInputBox{position:relative;}
     .vfInputBox input[type=text],.vfInputBox textarea{padding-right:104px;display:block;}
     .vfCounter{position:absolute;right:12px;top:50%;transform:translateY(-50%);display:none;pointer-events:none;font-size:.75rem;font-weight:500;white-space:nowrap;
@@ -2183,6 +2190,33 @@ async function shareToWhatsApp(blob, fileName='selfie.jpg', caption='', saveOnBa
   toast('Photo saved. Attach it in WhatsApp.');
   window.open('https://wa.me/?text=' + encodeURIComponent(caption || ''), '_blank');
 }
+
+/* WhatsApp on some phones drops the text sent along with a photo. The Done screen shows the caption with a way to copy it or send it as a message. */
+function currentVisitCaption(){ try{ return VisitForm.getCaption() || ''; }catch(e){ return ''; } }
+function visitCaptionBoxHTML(){
+  const c = currentVisitCaption();
+  if(!c) return '';
+  return `<div class="vfCaption"><div class="vfCaptionLabel">WhatsApp caption</div><div class="vfCaptionText">${esc(c)}</div>` +
+    `<p class="vfCaptionHelp">Caption missing under the photo in WhatsApp? Copy it, or send it as a message.</p>` +
+    `<div class="vfCaptionActions"><button class="btn" type="button" onclick="copyVisitCaption()">Copy caption</button>` +
+    `<button class="btn" type="button" onclick="shareVisitCaption()">Send caption</button></div></div>`;
+}
+async function copyVisitCaption(){
+  const c = currentVisitCaption();
+  if(!c) return;
+  let ok = false;
+  try{ await navigator.clipboard.writeText(c); ok = true; }catch(e){}
+  if(!ok){
+    try{
+      const t = document.createElement('textarea');
+      t.value = c; t.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(t); t.focus(); t.select();
+      ok = document.execCommand('copy'); t.remove();
+    }catch(e){}
+  }
+  toast(ok ? 'Caption copied' : 'Could not copy the caption');
+}
+function shareVisitCaption(){ const c = currentVisitCaption(); if(c) shareTextToWhatsApp(c); }
 
 async function shareTextToWhatsApp(text){
   const Plugins = window.Capacitor && window.Capacitor.Plugins;
@@ -3986,6 +4020,7 @@ const VisitForm = (function(){
         <h2 id="vfDoneTitle">Submitting…</h2>
         <p id="vfDoneMsg">Sending your responses to the tracker sheet…</p>
         <div class="vfSummary">${submittedLines.length ? vfEsc(submittedLines.join('\n\n')) : '(Distributor Meet — no further details required.)'}</div>
+        ${visitCaptionBoxHTML()}
         <button class="btn primary" type="button" onclick="showScreen('screen-dashboard')">Back to Dashboard</button>
       </div>
     `;
